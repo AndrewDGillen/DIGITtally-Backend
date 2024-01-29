@@ -1,13 +1,6 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 
 from collections import defaultdict
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Analyses expression of orthologs to D. melanogaster genes of interest in the silkworm Bombyx mori using RNAseq data from SilkDB (https://silkdb.bioinfotoolkits.net/main/species-info/-1)
-
 
 #Gathers tissues of interest from designated text files
 def build_tiss_lists(tissuesfile):
@@ -34,7 +27,6 @@ def gather_weights(targetweights):
 
     return weight_dict
 
-#Populates the B. mori orthologs for each gene of interest, using the designated ortholog file
 def pop_orthos(input):
     ortholist = []
     problemlist = {}
@@ -48,8 +40,7 @@ def pop_orthos(input):
         INfos = csv.reader(foundorthosfile)
 
         next(INfos)
-	
-	#Each line corresponds to a single gene
+
         for line in INfos:
             fbgene = line[0].strip('\n')
 
@@ -66,23 +57,19 @@ def pop_orthos(input):
 
                 for gene in indivgenes:
                     indivortho = gene.strip(" '")
-		    
-		    #Trims orthologue names as necessary
+
                     if indivortho[0].isalpha() == False:
                         indivortho = indivortho[1:]
                     
                     if indivortho[-1].isnumeric() == False:
                         indivortho = indivortho[:-1]
-                        
-                    #we set up a dictionary of lists which holds all the orthologs associated with each FbID
+
                     dmeltoorthodict[fbgene].append(indivortho)
-                    
-                    #The reverse is slightly harder - we want to create a dictionary matching each ortholog to a specific FbID but some orthologs can be associated with multiple
+
                     if indivortho not in ortholist:
                         orthotodmeldict[indivortho] = fbgene
                         ortholist.append(indivortho)
 
-	            #B.mor genes which are already associated with a FbID are added to the "problem ortho" dictionary
                     else:
                         try:
                             problemlist[indivortho].append(fbgene)
@@ -91,8 +78,6 @@ def pop_orthos(input):
     
     return ortholist, orthotodmeldict, dmeltoorthodict, problemlist, has_an_ortho, allgenes
 
-#Gets the positions of each tissue within each line of the input data
-#This is determined at runtime because the SilkDB data is organised in a very unintuitive fashion
 def find_tissue_positions(parsed_line):
     itemcount = 0
 
@@ -125,7 +110,6 @@ def find_tissue_positions(parsed_line):
     
     return tissuetups
 
-#Creates a list of tuples, of format (expression dictionary, stage name) for each Bombyx mori life stage in use
 def create_type_tuples(worm_stages):
     type_tuples = []
 
@@ -135,7 +119,6 @@ def create_type_tuples(worm_stages):
     
     return type_tuples
 
-#The tissues which exist in each life stage are added to the appropriate expression dictionary, with the expresssion data accomanying
 def populate_individual_dict(type_tuples, tissuetups, parsed_line):
 
     for individual_type in type_tuples:
@@ -147,8 +130,6 @@ def populate_individual_dict(type_tuples, tissuetups, parsed_line):
 
     return type_tuples
 
-#Not all tissues in SilkDB are available for all life stages. 
-#Using user-selected tissue types, we check which life stages contain usable information. Only this subset of data will be analysed
 def find_usability(types_tuples, targettissues, stages):
     tissues_usable_by_stage = defaultdict(list)
     wormtypes_with_tissue = defaultdict(list)
@@ -242,10 +223,8 @@ def effect_removal(to_remove, uncompleted_cats_section):
     
     return newcats
 
-#Analyses expression data for orthologs of interest within SilkDB data
 def find_silkdb_expression(targettissues, orthologs, orthotodmel, threshold, specthresh, problemorthos, worm_stages, silkdb, has_an_ortho, fpkm_min):
-    
-    #Creates a list of (expression data dict, silkworm stage) tuples
+
     base_type_tuples = create_type_tuples(worm_stages)
     
     usability_check = False
@@ -256,31 +235,22 @@ def find_silkdb_expression(targettissues, orthologs, orthotodmel, threshold, spe
         for line in silkdbfile:
             parsed_line = line.split('\t')
             indivortho = parsed_line[0]
-	    
-	    #The first line of the data file can be used to find tissue positions 
+
             if linecount == 0:
 
                 tissuetups = find_tissue_positions(parsed_line)
 
                 linecount += 1
-                continue
-                	
-	    #Each other line in the data contains data on a single gene. 
-	    #For the first line , we initialise the scoring system for usable tissue/lifestages
-            elif linecount == 1:
                 
-                #We gather expression data for the gene in all tissue types
+            elif linecount == 1:
                 orthologs_types_tuples = populate_individual_dict(base_type_tuples, tissuetups, parsed_line)
                 
-                #We check which of the tissue types are useable within each worm life stage
                 tissues_usable_by_stage, wormtypes_with_tissue, refined_type_list = find_usability(orthologs_types_tuples, targettissues, worm_stages)
-		
-		#We intialise the uncompleted_cats system for all usable life stages/tissue types
+
                 uncompleted_cats = initialise_scoring_system(has_an_ortho, targettissues, refined_type_list)
                 
                 linecount += 1
-            
-            #Other genes are processed similarly
+                
             if indivortho in orthologs:
                 abundance_dict = {}
 
@@ -288,10 +258,8 @@ def find_silkdb_expression(targettissues, orthologs, orthotodmel, threshold, spe
 
                 fbgene = orthotodmel[indivortho]
                 
-                #We gather expression data for the gene in all tissue types
                 orthologs_types_tuples = populate_individual_dict(base_type_tuples, tissuetups, parsed_line)
-		
-		#Ensures scoring is initialised
+
                 if usability_check == False:
 
                     tissues_usable_by_stage, wormtypes_with_tissue, refined_type_list = find_usability(orthologs_types_tuples, targettissues, worm_stages)
@@ -300,63 +268,52 @@ def find_silkdb_expression(targettissues, orthologs, orthotodmel, threshold, spe
 
                     usability_check = True
                     
-                #Creates a list in "to_remove" for each life stageof interest
+                #Creates a list in "to_remove" for each sex of interest
                 for type in refined_type_list:
                     to_remove[type] = defaultdict(list)
-		
+
                 for indiv_type in orthologs_types_tuples:
                     
                     type_label = indiv_type[1]
-		    
-		    #For each USABLE worm type of interest:
+
                     if type_label in refined_type_list:
                         wholeworm = []
 
                         nontarget_reads = []
-			
-			#We gather INDIVIDUAL TISSUE expression data
+
                         reads_in_type = indiv_type[0]
 
                         for indiv_tissue in reads_in_type:
 
                             abundance = float(reads_in_type[indiv_tissue])
-			    
-			    #SilkDB has no true "Whole Insect" - A pseudo-Whole is created by averaging across all tissue types
+
                             wholeworm.append(abundance)
 
                             abundance_dict[indiv_tissue] = abundance
-                           
-                            #We also add the read to a list of non tatget reads if not a target tissue
+
                             if indiv_tissue not in targettissues:
                                 nontarget_reads.append(abundance)
                         
-                        #The pseudo-Whole is created by averaging across all tissue types
                         wholewormavg = float(sum(wholeworm)/len(wholeworm))
-                        
-                        #The pseudo-Whole is adjusted up to the FPKM baseline
+
                         if wholewormavg < fpkm_min:
                             wholewormavg = fpkm_min
 
                         for indivtissue in abundance_dict:
-                            
-                            #For each target tissue, we check for Enrichment, Specificity, and Expression
+
                             if indivtissue in targettissues and type_label in refined_type_list:
 
                                 enrichment = float(abundance_dict[indivtissue]/wholewormavg)
-				
-				#If a gene is higher than the pseudo-Whole expression, it is Enriched in that tissue
+
                                 if enrichment > threshold:
                                     to_remove[type_label]['Enrichment'].append(indivtissue)
                                 
-                                #If a gene is higher than the FPKM threshold, it is Expressed in that tissue
                                 if abundance_dict[indivtissue] > fpkm_min:
                                     to_remove[type_label]['Expression'].append(indivtissue)
                                 
-                                #If a gene is higher than in all non-target tissues, it is Specific to that tissue
                                 if abundance_dict[indivtissue] > (max(nontarget_reads) * specthresh):
                                     to_remove[type_label]['Specificity'].append(indivtissue)
-		
-		#If an multiple FBgns correspond to an ortholog, ALL OF THOSE datasets should mirror.
+
                 if indivortho in problemorthos:
                     for othergene in problemorthos[indivortho]:
                         uncompleted_cats[othergene] = effect_removal(to_remove, uncompleted_cats[othergene])
@@ -428,8 +385,6 @@ def score_by_cat(uncompleted_cats, tissues_usable_by_stage, target_tissues):
 
     return tally_compilation
 
-#Prints all relevant data to an output file for easy analysis. 
-#An accompanying readme file detailing tissue types by ife stage is also generated
 def printoutscores(tally_comp, dmeltoortho, threshold, specthresh, outfolder, wormtypes_by_tissue, tissues_usable_by_stage, allgenes):
 
     with open(f'{outfolder}/Bmor_SilkDB_README.txt', 'w+') as readmefile:
@@ -483,7 +438,6 @@ def printoutscores(tally_comp, dmeltoortho, threshold, specthresh, outfolder, wo
 def silkdb_tally_default():
     return [0, 0, 0]
 
-#Creates a list of silkworm types which the user wishes included
 def generate_use_list(weight_dict):
     use_list = []
 

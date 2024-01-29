@@ -1,10 +1,4 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Gathers Orthologues for DIGITtally species (Aedes aegypti, Anopheles gambiae, Bombyx mori) from OrthoDB data (https://www.orthodb.org/)
 
 #creates ortholog output files for each species and prints the header row. 
 def create_file(species, outfolder):
@@ -28,7 +22,6 @@ def populate_lists(annos):
     
     return annolist
 
-#Returns the coluimn of the data file which contains orthologs from a specified species
 def get_species_column(species):
     if species == 'Aedes aegypti':
         return 5
@@ -40,7 +33,6 @@ def get_species_column(species):
         print(f'{species} not recognised in orthology file - please check settings!!')
         exit()
 
-#Returns the orthologs for a list of genes from the data file
 def locate_orthologs(species, genes, fullfile):
     
     orthologs = {}

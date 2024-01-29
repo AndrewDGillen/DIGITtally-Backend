@@ -1,14 +1,9 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
 
 import csv
 import gc
 
 import loompy as lp
 import pandas as pd
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Specifically, this program analyses the Single cell data in (https://flycellatlas.org/)
 
 #Creates lists of genes of interest and reference genes
 def populate_lists(gois, refs):
@@ -44,14 +39,12 @@ def populate_singlecells(loomdf):
     for item in cellarray:
         cellcharacteristics[item[0]].append(item[1])
     
-    #We gather the cell type associated with each cell
     for entry in cellcharacteristics:
         info = cellcharacteristics[entry]
         compiled = info[0] + ' : ' + info[1]
         if compiled not in unique_subsets:
             unique_subsets.append(compiled)
-    
-    #We then compile a dictionary counting the number associated with each cell type
+
     for subset in unique_subsets:
         subset_totals[subset] = 0
 
@@ -134,7 +127,7 @@ def find_goi_expression(goilist, expressiondict, cellcharacteristics, unique_sub
                 print(f'\n{reference} not recognised within the LOOM file - have you run SCOPEscope?\n\nExiting until this issue is resolved.')
                 exit()
 
-	    #For each individual cell, we gather expression data seperately
+
             for cellid in cellcharacteristics:
                 celltype = cellcharacteristics[cellid]
                 compiledtype = celltype[0] + ' : ' + celltype[1]
@@ -147,13 +140,9 @@ def find_goi_expression(goilist, expressiondict, cellcharacteristics, unique_sub
 
                 expression_by_subset[compiledtype] += (goiread)
 
-                #UMI >= 1 is used to classify a gene as "present" in FlyCellAtlas - see original paper (Hongjie et al., 2022)
+                #UMI >= 1 is used to classify a gene as "present" in FlyCellAtlas - see original paper ()
                 if goiread >= 1:
-                
-                    #If the gene is expressed in a given cell, we incrememnt the number of cells of that type by 1
                     present_by_subset[compiledtype] += 1
-                    
-                    #If reference genes are also in use, we check whether each reference gene is also expressed
                     if reflist != []:
                         for ref in expressiondict[cellid]:
                         
@@ -162,12 +151,9 @@ def find_goi_expression(goilist, expressiondict, cellcharacteristics, unique_sub
                         
                             if compiledtype not in overlap_by_subset[ref]:
                                 overlap_by_subset[ref][compiledtype] = 0
-                            
-                            #If both target and reference genes, we increment the count for that cell type by 1
+                        
                             if expressiondict[cellid][ref] >= 1:
                                 overlap_by_subset[ref][compiledtype] += 1
-                                
-            #Now that overlap counts have been made, we check the % of each cell type which express each gene and each reference gene
             if reflist != []:
                 with open(f'{output}/OverlapPercents/PercentOverlap_{gene}.csv', 'w+') as overlapbygenefile, open(f'{output}/OverlapCounts/OverlapCounts_{gene}.csv','w+') as overlapcountfile:
                     OUTpercentoverlapgene = csv.writer(overlapbygenefile)
@@ -198,39 +184,31 @@ def find_goi_expression(goilist, expressiondict, cellcharacteristics, unique_sub
                     
                         OUTpercentoverlapgene.writerow(percentoutline)
                         OUTcountoverlapgene.writerow(countoutline)
-            
-            #We clear the dictionaries once useful data has been analysed to free up RAM
+
             del overlap_by_subset
             del goiframe
             gc.collect()
             
             goiframe = pd.DataFrame()
             overlap_by_subset = {}
-            
-            #We print the expression data from each gene to the output file
+
             countrow = [gene,]
             percentrow = [gene,]
             avgrow = [gene,]
-            
+
             for subset in expression_by_subset:
-            
-                #If this is the first gene, we assemble the header listing cell types
                 if topheaderprinted == 0:
                     toplevelheader.append(subset)
-                
-                #The total count by cell type is printed into the COUNT file
+
                 totalcount = present_by_subset[subset]
                 countrow.append(totalcount)
-		
-		#The % of cells of each type expressing a gene is printed to the PERCENTAGE file
+
                 percent = (totalcount / subset_totals[subset]) * 100
                 percentrow.append(percent)
 
-		#The average expression of each gene in each cell type is printed to the AVERAGE file
                 avgexpression = (expression_by_subset[subset]/subset_totals[subset])
                 avgrow.append(avgexpression)
-	    
-	    #If this is the first gene, we print the header
+
             if topheaderprinted == 0:
                 OUTcount.writerow(toplevelheader)
                 OUTpercent.writerow(toplevelheader)
@@ -238,39 +216,27 @@ def find_goi_expression(goilist, expressiondict, cellcharacteristics, unique_sub
 
                 topheaderprinted += 1
             
-            #We then print the gene's data
             OUTcount.writerow(countrow)
             OUTpercent.writerow(percentrow)
             OUTavg.writerow(avgrow)
-	   
-	    #Again, we free up RAM and reset dictionaries
+
             del present_by_subset
             del expression_by_subset
             gc.collect()
-            
             present_by_subset = {}
             expression_by_subset = {}
 
 def Analyse_FCA(loomfile, goi_checked, reference_gene_file, output_folder):
 
-    #We gather lists of genes of interest and reference genes
     goilist, reflist = populate_lists(goi_checked, reference_gene_file)
- 
-    #The LOOM file is loaded
+
     df = lp.connect(loomfile, validate = False)
-    
-    #We gather cell/tissue/annotation types for each cell
+
     cellcharacteristics, subset_totals, unique_subsets = populate_singlecells(df)
-    
-    #Initialise output files
     make_total_out(subset_totals, output_folder)
-    
-    #We gather expression data for reference genes
-    #IE - which cells express each gene
+
     expressiondict = find_ref_expression(reflist, cellcharacteristics, df)
-    
-    #Finally, we check the expression of each gene in each type of cell
-    #Specifically, we check:	TOTAL NUMBER of cells expressing that gene; 	PERCENTAGE of that type that express that gene;		AVERAGE gene expression in that cell type
+
     find_goi_expression(goilist, expressiondict, cellcharacteristics, unique_subsets, subset_totals, df, output_folder, reflist)
     
     df.close()

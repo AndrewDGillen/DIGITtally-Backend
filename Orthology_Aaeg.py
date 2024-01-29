@@ -1,12 +1,6 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 
 from collections import defaultdict
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Analyses expression of orthologs to D. melanogaster genes of interest in the mosquito Aedes Aegypti using RNAseq data from Aegypti-Atlas (http://aegyptiatlas.buchonlab.com/)
 
 #Gathers tissues of interest from designated text files
 def build_tiss_lists(tissuesfile):
@@ -33,7 +27,7 @@ def gather_weights(targetweights):
 
     return weight_dict
 
-#Populates the A. aeg orthologs for each gene of interest, using the designated ortholog file
+#Populates the A. gam orthologs for each gene of interest, using the designated ortholog file
 def pop_orthos(input):
     ortholist = set()
     problem_orthos = {}
@@ -48,8 +42,7 @@ def pop_orthos(input):
         INfos = csv.reader(foundorthosfile)
 
         next(INfos)
-	
-	#Each line corresponds to a single gene
+
         for line in INfos:
             fbgene = line[0]
             all_genes.append(fbgene)
@@ -86,7 +79,7 @@ def pop_orthos(input):
     
     return ortholist, orthotodmeldict, dmeltoorthodict, problem_orthos, has_an_ortho, all_genes
 
-#Gets the average expression of a gene in a single tissue, given the indices which correspond to that tissue
+
 def get_tissue_expression(indices, current_line):
     expression = float(0)
 
@@ -181,27 +174,23 @@ def effect_removal(to_remove, uncompleted_cats_section):
     
     return newcats
 
-#Gets the expression of a list of genes from AegyptiAtlas data
 def find_aegyptiatlas_expression(tissues_of_interest, orthologs, orthotodmel, threshold, specthresh, atlasdata, fpkm_background, problemorthos, has_an_ortho):
 
-    #Defines target/Non-target tissues
     tissue_indices = define_tissues()
+
     tissues_to_check = define_non_targets(tissues_of_interest, tissue_indices)
 
-    #Sets up uncompleted_cats dictionary, which keeps track of which tissues express which gene
+    #Sets up uncompleted_cats
     uncompleted_cats = initialise_scoring_system(has_an_ortho, tissues_of_interest)
 
     with open(atlasdata) as aeatlasfile:
         INaareader = csv.reader(aeatlasfile)
-	
-	#Skips past headers
+
         for i in range(3):
             next(INaareader)
 
-	#Each line corresponds to a single gene
         for line in INaareader:
             
-            #If the gene is an ortholog of interest, we analyse its expression 
             if line[0] in orthologs:
                 enrichment = {}
                 expression = {}
@@ -277,7 +266,6 @@ def score_by_cat(uncompleted_cats, mozatlas_tally):
         
     return mozatlas_tally
 
-#Prints relevant gene expression data to an output file
 def printoutscores(hitscores, dmeltoortho, threshold, specthresh, outpath, all_genes):
 
     with open(f'{outpath}/Aaeg_AegyptiAtlas_Breakdown.csv', 'w+') as conservefile:

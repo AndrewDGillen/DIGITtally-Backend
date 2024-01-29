@@ -1,15 +1,11 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 import argparse
 import os
 
+from getpass import getpass
+
 import mysql.connector
 from mysql.connector import Error
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Specifically, this program analyses the microarray data present in FlyAtlas2 (https://motif.mvls.gla.ac.uk/FlyAtlas2/)
 
 #Connects to the specified MySQL database
 def create_server_connection(host_name, user_name, user_password, db_name):

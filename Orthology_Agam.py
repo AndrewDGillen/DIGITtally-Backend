@@ -1,15 +1,10 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
 import csv
-import re
-import mysql.connector
 
 from collections import defaultdict
-from mysql.connector import Error
+import re
 
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Analyses expression of orthologs to D. melanogaster genes of interest in the mosquito Anopheles gambiae using microarray data from MozAtlas (http://mozatlas.gen.cam.ac.uk/mozatlas/)
-#And ALSO from MozTubules (http://moztubules.org/search2016.cgi)
+import mysql.connector
+from mysql.connector import Error
 
 #A simple function to break up the weight string supplied in input arguments into an accessible dictionary
 def gather_weights(targetweights):
@@ -25,7 +20,6 @@ def gather_weights(targetweights):
 
     return weight_dict
 
-#MozAtlas doesn't actually include "Adult", though MozTUbules does - We disambiguate the "Adult" data request here 
 def define_sexes(target_dict):
     target_sexes = set()
 

@@ -1,14 +1,7 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 import datetime
 
 from collections import defaultdict
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Specifically, this program runs at the final step of analysis, summarising all findings into a single "tally" based on user-designated weights
-#IE- how much each piece of data should matter to the final score
 
 #A simple function to break up the weight string supplied in input arguments into an accessible dictionary
 def gather_weights(targetweights):
@@ -171,8 +164,6 @@ def expand_fca(folder, data_by_id, id_by_symbol, synonyms, all_hit_ids):
 
                     data_by_id[data_type[0]]['FlyCellAtlas'][indiv_id] = line[data_type[1]]
             
-            #If none of the reference genes have data available, a co-expression score of 0 is returned
-            #This should not come up but better to be safe!
             try:
                 for indiv_id in fb_id:
                     data_by_id['Coexpression']['FlyCellAtlas'][indiv_id] = line[5]
@@ -242,10 +233,8 @@ def weight_results(data_by_id, broad_weights, specific_weights):
 
     sorted_list = sorted(to_sort)
 
-    #Each category is handled seperately
     for category in sorted_list:
-	
-	#Some categories have extra info as well as their actual scoring metric - these are parsed out (but still kept for informational purposes)
+
         if '_' in category:
             category_split = category.split('_')
 
@@ -255,31 +244,24 @@ def weight_results(data_by_id, broad_weights, specific_weights):
         else:
             cat_heading = category
             supplemental_info = ''
-	
-	#We gather the weight associated with the category
+
         broad_cat_weight = broad_weights[cat_heading]
-	
-	#As long as the category is in use, we modify the score as appropriate
+
         if broad_cat_weight != 0:
-            
-            #Every data source with a given category is handled seperately
             for data_source in data_by_id[category]:
 
-		#The global weight assigned to a specific data source is gathered
                 global_source_weight = specific_weights[data_source]['GLOBAL']
                 
-                #We use the available information to isolate source-specific metric weightings
                 if cat_heading == 'Orthology':
 
                     source_cat_weight = specific_weights['ortho'][supplemental_info]
                     
                 elif cat_heading == 'Known Activity':
                     source_cat_weight = specific_weights['FlyBase'][supplemental_info]
-                   
+                    
                 else:
                     source_cat_weight = specific_weights[data_source][cat_heading]
-		
-		#As long as the metric appears to still be in use (ie all scores > 0), we construct a descriptive heading
+
                 if global_source_weight != 0 and source_cat_weight != 0:
 
                     if cat_heading != 'Orthology':
@@ -292,8 +274,7 @@ def weight_results(data_by_id, broad_weights, specific_weights):
                         data_description = '' + supplemental_info + '_' + category
                         
                     header.append(data_description)
-		   
-		    #For each individual gene, its score for a specific metric is multiplied by every appropriate weight, then added to the tally
+
                     for indiv_id in data_by_id[category][data_source]:
                         
                         tally = float(data_by_id[category][data_source][indiv_id])
@@ -337,35 +318,26 @@ def create_digittally_output(folder, weighted_data, tally_header, symbol_by_id, 
             OUTdigittally.writerow(outrow)
 
 def WrapUp(tally_file_folder, synonym_file, broad_categories, flyatlas1, flyatlas2, flycellatlas, flybase, orthology, species):
-	
-    #List of DIGITtally datasources and the associated dataset
+
     specific_data_sources = [('FlyAtlas1', flyatlas1), ('FlyAtlas2', flyatlas2), ('FlyCellAtlas', flycellatlas), ('FlyBase', flybase), ('ortho', orthology)]
-    
-    #Weights are gathered into dictionaries
+
     broad_weights, specific_weights, passsource = populate_weight_dicts(broad_categories, specific_data_sources)
     
-    #The Initial tallying information (Based of FlyAtlas1 and FlyAtlas2) is populated
     data_by_id, id_by_symbol, symbol_by_id, transcripts_by_id, all_hit_ids = get_started(tally_file_folder)
 
-    #Synonyms are gathered
     if synonym_file != '':
         synonyms = get_synonyms(synonym_file)
-    
-    #FlyCellAtlas info is gathered
+
     if 'FlyCellAtlas' not in passsource:
         data_by_id = expand_fca(tally_file_folder, data_by_id, id_by_symbol, synonyms, all_hit_ids)
-    
-    #FlyBase info is gathered
+
     if 'FlyBase' not in passsource:
         data_by_id = expand_flybase(tally_file_folder, data_by_id)
-    
-    #All orthology information is gathered by species
+
     for indiv_species in species:
 
         data_by_id = process_orthology(tally_file_folder, data_by_id, indiv_species, id_by_symbol, synonyms)
     
-    #Results for each gene are weighted by Datasource/Score metric/Specific weighting
     weighted_data, tally_header, order = weight_results(data_by_id, broad_weights, specific_weights)
-    
-    #The final DIGITtally output is created
+
     create_digittally_output(tally_file_folder, weighted_data, tally_header, symbol_by_id, transcripts_by_id, order)

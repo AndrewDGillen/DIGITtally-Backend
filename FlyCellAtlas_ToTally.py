@@ -1,14 +1,8 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 import glob
 import os
 
 import scipy.stats as sp
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Specifically, this program analyses the Single cell data in (https://flycellatlas.org/), as assembled by FlyCellAtlas_Analyser.py
 
 #Creates lists of tissues/cell types of interest
 def populate_list(target, targetlist):
@@ -18,6 +12,17 @@ def populate_list(target, targetlist):
             targetlist.append(line.strip('\n'))
     
     return targetlist
+
+# #Creates a dictionary assigning each gene which was changed by SCOPEscope to their original name
+# def populate_synonyms(synfile):
+#     synonymdict = {}
+
+#     with open(synfile) as synonyms:
+#         INsyn = csv.reader(synonyms)
+#         next(INsyn)
+
+#         for line in INsyn:
+#             synonymdict[line[1]] = line[0]
 
 #Gets the actual designations for target tissues from the FCA_Cell_Types file, along with total counts for target and non-target tissues to be used in statistics.
 def get_celltypes(targets, associatedfiles):
@@ -33,7 +38,6 @@ def get_celltypes(targets, associatedfiles):
         for category in ['Target Tissues', 'ALL Non Target']:
             tot_dict[category] = 0
         
-        #For each cell type, we ensure correct name format and gather the number of cells of that type
         for line in INtypes:
             acttissname = line[1]
             letsmod = acttissname.split(' : ')
@@ -41,17 +45,14 @@ def get_celltypes(targets, associatedfiles):
 
             if "_" in upper_tiss_type:
                 upper_tiss_type = upper_tiss_type.replace('_', ' ')
-                
             upper_cell_type = letsmod[1].capitalize()
             acttissname = upper_tiss_type + ' : ' + upper_cell_type
             totalcount = line[5]
 
-	    #Given user-defined target cell types, we build a list of "Target" cell types
             if acttissname in targets:
                 targettypelist.append(acttissname)
                 tot_dict['Target Tissues'] += float(totalcount)
-                
-	    #And non-target cell types
+
             else:
                 nontargetlist.append(acttissname)
                 tot_dict['ALL Non Target'] += float(totalcount)
@@ -70,10 +71,7 @@ def get_freqs(tot_dict):
 
     return freq_te, freq_nt
 
-#Using parsed FlyCellAtlas data (From FlyCellAtlas_Analyser), we check for various parameters for scoring:
-	#ENRICHMENT (is a gene more frequent in TARGET cells than NON TARGET cells?)
-	#SPECIFICITY (The % of NON TARGET cells which DO NOT express a gene) AND (The % of cells expressing a gene which ARE TARGET)
-	#UBIQUITY (The % of TARGET cells which DO express a gene)
+#desc
 def handle_positive_counts(infolder, targettypelist, nontargetlist, tot_dict):
     genecounts = {}
     tallydict = {}
@@ -83,8 +81,7 @@ def handle_positive_counts(infolder, targettypelist, nontargetlist, tot_dict):
     ntindices = []
 
     adjfactor = 0
-    
-    #We assemble a list of totals for each type of tissue (target/non target/ all cells) to aid with interpretation of stats
+
     totalline = ['TOTAL', tot_dict['Target Tissues'],  tot_dict['ALL Non Target'], (tot_dict['Target Tissues'] + tot_dict['ALL Non Target'])]
     poscountlines.append(totalline)
     print(targettypelist)
@@ -93,14 +90,10 @@ def handle_positive_counts(infolder, targettypelist, nontargetlist, tot_dict):
         INposreader = csv.reader(poscountinfile)
         
         linecount = 0
-        
-        
         for line in INposreader:
-            
-            #The first line in the file lists cell types - these are stored in a list
             if linecount == 0:
                 indice = 0
- 
+
                 for item in line:
                 
                     if ':' in item:
@@ -123,10 +116,8 @@ def handle_positive_counts(infolder, targettypelist, nontargetlist, tot_dict):
                         ntindices.append(indice)
 
                     indice += 1
-                    
-            #Each line represents data for one gene
+
             else:
-            	#Each item in the line represents data from a single cell type
                 gene = line[0]
 
                 genecounts[gene] = {}
@@ -138,41 +129,36 @@ def handle_positive_counts(infolder, targettypelist, nontargetlist, tot_dict):
                 gene = line[0]
 
                 adjfactor += 1
-                
-                #We gather a total count of target cells which express the current gene
+
                 for index in targetindices:
                     targetcount += int(line[index])
 
                 genecounts[gene]['t'] = targetcount
-                
-                #Get the UBIQUITY of the gene
+
                 ubiquitytally = (targetcount/tot_dict['Target Tissues'])
                 tallydict[gene].append(ubiquitytally)
                 targetpercent = ubiquitytally * 100
-		
-		#Do the same for non target cells
+
                 for index in ntindices:
                     ntcount += int(line[index])
 
+                #Do the same for non target cells
                 genecounts[gene]['nt'] = ntcount
                 
-                #Get the SPECIFICITY of the Gene (1/% NOT TARGET cells expressing a gene)
                 nontargettally = (ntcount/tot_dict['ALL Non Target'])
                 tallydict[gene].append(1- (nontargettally))
                 nontargetpercent = nontargettally * 100
 
-                #Then we get a percent of ALL cells which express a given gene - the TOTAL FREQUENCY OF GENE EXPRESSION (Needed for Chi_Squared)
+                #Then we get a percent of ALL cells which express a given gene
                 tot_positive = targetcount + ntcount
                 genecounts[gene]['tot'] = tot_positive
-		
-		#Gets the alternate specificty measure - % cells expressing a gene are target
+
                 specificitytally = (targetcount/tot_positive)
                 tallydict[gene].append(specificitytally)
 
                 percentaretarget = (specificitytally)*100
                 percentarenontarget = (ntcount/tot_positive)*100
-		
-		#Data for a single gene are assembled into an output line
+
                 indivposcount = [gene, targetcount, ntcount, tot_positive, ' ', targetpercent, nontargetpercent,' ', percentaretarget, percentarenontarget]
                 poscountlines.append(indivposcount)
         
@@ -202,20 +188,17 @@ def chisquare(genecounts, adjfactor, freq_t, freq_nt, tallydict):
         targetcount = genecounts[gene]['t']
         ntcount = genecounts[gene]['nt']
         genetot = genecounts[gene]['tot']
-	
-	#Gets the expected count of cells whch would express a gene based on global frequency
+
         expcount_t = genetot * freq_t
         expcount_nt = genetot * freq_nt
-	
+
         enrichmentdict[gene] = [[targetcount, ntcount], [expcount_t, expcount_nt]]
     
-    #The p-value threshold is adjusted for multiple testing
     pthresh = 0.01 / adjfactor
 
     for gene in enrichmentdict:
         actual, expected = enrichmentdict[gene]
-	
-	#We use a chi-squared to test whether genes are enriched within TARGET cells
+
         chsqresults = sp.chisquare(actual, f_exp = expected)
         stat = chsqresults[1]
         tally = 0
@@ -253,7 +236,7 @@ def print_stats(printables, adjfactor, freq_t, freq_nt, outname):
         for iline in printables:
             OUTdistribution.writerow(iline)
 
-#If co-expression is to be used, we check the % of target cells which express both a given gene and each reference gene
+#desc
 def handle_overlap_counts(infolder, genecounts, hittally):
     for gene in genecounts:
 

@@ -1,11 +1,5 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 import os
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Specifically, this program analyses the microarray data present in FlyAtlas (http://flyatlas.org/atlas.cgi)
 
 #Creates a dictionary associating each sequence in the microarray with specific gene(s)
 def populate_annotations(annotationfile):
@@ -322,6 +316,17 @@ def make_string(floating_point, identifier):
 
     return final_string
 
+#Updates the output folder to reflect enrichment thresholds, then creates the folder
+#def update_out_name(folder_name, enr_thresh, abn_thresh):
+    #enrthresh_string = make_string(enr_thresh,'enr')
+    #abnthresh_string = make_string(abn_thresh, 'abn')
+
+    #new_out_name = folder_name + '_' + enrthresh_string + '_' + abnthresh_string
+
+    #os.mkdir(f'{new_out_name}')
+
+    #return new_out_name
+
 def analyse_FA1(annotationfile, targettissues, permissive, outfolder, enrstringency, abnstringency, mode, presentthresh, fa1file):
     
     annodict = populate_annotations(annotationfile)
@@ -334,5 +339,6 @@ def analyse_FA1(annotationfile, targettissues, permissive, outfolder, enrstringe
     if permissive != [] and permissive != ['']:
         permissive_adult, permissive_larval = build_tiss_lists(permissive)
 
+    #new_output_folder = update_out_name(outfolder, enrstringency, abnstringency)
 
     get_expression(annodict, enrstringency, abnstringency, mode, toiadult, toilarval, presentthresh, outfolder, fa1file, permissive_adult, permissive_larval)

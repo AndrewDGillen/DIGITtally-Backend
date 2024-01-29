@@ -1,13 +1,7 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 import gc
 import loompy as lp
 import pandas as pd
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Specifically, this program checks whether genes of interest, or any known synonym, can be identified within FlyCellAtlas (https://flycellatlas.org/)
 
 #Creates lists of genes of interest and reference genes
 def populate_list(gois):

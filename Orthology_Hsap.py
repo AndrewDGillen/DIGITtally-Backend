@@ -1,12 +1,6 @@
-#Code written by Dr. Andrew Gillen (Dow-Davies lab, University of Glasgow)
-#Originally written October 2022, last updated 26/06/2023
-
 import csv
 
 from collections import defaultdict
-
-#Part of the pipeline for DIGITtally analysis - see www.digittally.org
-#Analyses existence of orthologs to D. melanogaster genes of interest in Humans using the robust DIOPT system (https://www.flyrnai.org/cgi-bin/DRSC_orthologs.pl)
 
 #Creates a list of the desired annotations, from the annotation text file.
 def populate_lists(ids):

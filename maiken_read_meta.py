@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 import re
 
-parser = argparse.ArgumentParser(description='Gene expression comparison\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser = argparse.ArgumentParser(description='Metadata reader\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--metadata', required=False, help='TSV file with columns for sample, sex, tissue and age')
 args = parser.parse_args()
 meta = args.metadata
@@ -93,6 +93,14 @@ def check_enrichment(meta_pd):
         return False
 
 
+"""meta_categories = get_meta_cats(meta)
+meta_samples = get_meta_samples(meta)
+meta_sexes = get_meta_sexes(meta)
+age_category = get_age_categories(meta)
+meta_ages = get_meta_ages(meta)
+meta_tissues = get_meta_tissues(meta)
+specificity = check_specificity(meta)
+enrichment = check_enrichment(meta)"""
 
 
 

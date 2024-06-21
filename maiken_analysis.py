@@ -4,16 +4,27 @@ import re
 from maiken_read_meta import *
 import os
 
-parser = argparse.ArgumentParser(description='Gene expression comparison\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('-md', help='TSV file with columns for sample, sex, tissue and age')
-parser.add_argument('-mx', help='File containing gene/sample matrix of gene expression estimates')
-args = parser.parse_args()
-matrix = args.mx
-meta = args.md
+def argparse_analysis():
+    parser = argparse.ArgumentParser(description='Gene expression comparison\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--metadata', help='TSV file with columns for sample, sex, tissue and age')
+    parser.add_argument('--matrix', help='File containing gene/sample matrix of gene expression estimates')
+    parser.add_argument('-s', action='store_true', help='Run specificity True/False')
+    parser.add_argument('--sthres', default = 2, help='Threshold ratio for specificity')
+    parser.add_argument('-e', action='store_true', help='Run enrichment True/False')
+    parser.add_argument('--ethres', default = 2, help='Threshold ratio for enrichment')
+    parser.add_argument('--tissue', required=True, help='Tissue of interest')
+    parser.add_argument('--sex', help='Sex of interest')
+    parser.add_argument('--age', help='Age of interest')
+    parser.add_argument('--directory', help='Path to output directory')
+    #return parser
 
-def set_up_matrix(matrix_pd):
-    genecolumn= matrix_pd.columns[0]
-    matrix_pd = matrix_pd.set_index(genecolumn)
+
+def read_matrix(arg_parser):
+    parser = arg_parser()
+    matrix_pd = parser.matrix
+    matrix_pd = pd.read_csv(matrix_pd, sep="\t")
+    genecolumn = matrix_pd.columns[0]
+    matrix_pd = matrix_pd.set_index(genecolumn).apply(pd.to_numeric)
     return matrix_pd
 
 def get_matrix_samples(matrix_pd):
@@ -29,27 +40,18 @@ def check_meta_matrix_samples(meta_pd, matrix_pd):
     except AssertionError:
         print("The samples IDs either contain duplicates or do not match between the metadata and the matrix")
 
-"""def make_database(meta_pd)
-    if not os.path.isfile("metadata.db"):
-        #A second file with the SQL create statements is opened to read.
-        try:
-            with open('SQL_DDL_2938235.txt', 'r') as sql_ddl:
-                ddl_script = sql_ddl.read()
-                db_manager.create_db(ddl_script)
-        except FileNotFoundError:
-            logger.error(f"SQL file 'SQL_DDL_2938235.txt' is not in the same directory as the program. Please ensure the file and program are in the working directory and try again.")
-            raise SystemExit (1)
-    else:
-         logger.error(f'Database "{args.database}" already exists. Please try again with a different filename.')"""
-
-def build_query_dict(tissue, sex, age):
+def query_dict(arg_parser):
+    parser = arg_parser()
+    tissue = parser.tissue
+    sex = parser.sex
+    age = parser.age
     query = {}
     if bool(tissue) == True:
-        query['Tissue'] == tissue
+        query['Tissue'] = tissue
     if bool(sex) == True:
-        query['Sex'] == sex
+        query['Sex'] = sex
     if bool(age) == True:
-        query['Age'] == age
+        query['Age'] = age
     return query
 
 def filter_samples(meta_pd, query):
@@ -58,28 +60,116 @@ def filter_samples(meta_pd, query):
         filtered_metadata = filtered_metadata[filtered_metadata[key] == value]
     return filtered_metadata['Sample']
 
-def run_specificity(specificity, meta_pd, matrix_pd, tissue, sex, age):
-    if specificity:
-        
-        query = build_query_dict(tissue, sex, age)
-        query_samples = filter_samples(meta_pd, query)
-        filtered_matrix = matrix_pd[query_samples]
-        average_gene_expression = filtered_matrix.mean(axis=0)
-        return average_gene_expression
+def write_file(data, filename, output_folder):
+    """output_folder= f"{output_folder}/Expression analysis"
+    if os.path.exists(output_folder) == False:
+        os.mkdir(output_folder)
+    else:
+        extension = 1
+        while os.path.exists(output_folder):
+            extension += 1
+            output_folder = f"{output_folder}{extension}"
+        os.mkdir(output_folder)"""
+    data.to_csv(f"{output_folder}/{filename}.tsv", sep='\t')
 
-meta= read_tsv(meta)
-matrix= read_tsv(matrix)
+def run_specificity(arg_parser):
+    parser = arg_parser()
+    specificity = parser.s
+    meta_pd = parser.metadata
+    matrix_pd = parser.matrix
+    threshold = parser.sthres
+    tissue = parser.tissue
+    output_folder = parser.directory
+    if specificity:
+        all_tissues = get_meta_tissues(meta, False)
+        non_target_means = {}
+        tissue = query_dict(arg_parser)
+        tissue = tissue['Tissue']
+        for tis in all_tissues:
+            query = query_dict(arg_parser)
+            query_samples = filter_samples(meta_pd, query)
+            query_matrix = matrix_pd[query_samples]
+            query_mean_expression = query_matrix.mean(axis=1)
+            if tis == tissue:
+                main_mean = query_mean_expression
+            else:
+                non_target_means[tis] = (list(query_mean_expression))
+        non_target_means = pd.DataFrame(non_target_means, index=matrix_pd.index).max(axis=1)
+        result = main_mean/non_target_means
+        result= result.apply(lambda x: True if x >= threshold else False)
+        result.name = "Specificity"
+        output = result[result == True]
+        write_file(output, f"Specific_to_{tissue}", output_folder)
+        return result
+
+def run_enrichment(arg_parser):
+    parser = arg_parser()
+    enrichment = parser.e
+    meta_pd = parser.metadata
+    matrix_pd = parser.matrix
+    threshold = parser.ethres
+    tissue = parser.tissue
+    output_folder = parser.directory
+    if enrichment:
+        all_tissues = get_meta_tissues(meta, True)
+        tissue = query_dict(parser)
+        tissue = tissue['Tissue']
+        for tis in all_tissues:
+            if find_wholefly(tis) == True or tis == tissue:
+                query = query_dict(parser)
+                query_samples = filter_samples(meta_pd, query)
+                query_matrix = matrix_pd[query_samples]
+                query_mean_expression = query_matrix.mean(axis=1)
+                if tis == tissue:
+                    main_mean = query_mean_expression
+                else:
+                    whole_mean = query_mean_expression
+        result = main_mean/whole_mean
+        result= result.apply(lambda x: True if x >= threshold else False)
+        result.name = "Enrichment"
+        output = result[result == True]
+        write_file(output, f"Enriched_in_{tissue}", output_folder)
+        return result
+
+def check_outputdir(output_folder):
+    output_folder= f"{output_folder}/Expression analysis"
+    if os.path.exists(output_folder) == False:
+        os.mkdir(output_folder)
+    else:
+        extension = 1
+        intermediate = output_folder
+        while os.path.exists(output_folder):
+            extension += 1
+            output_folder = f"{intermediate}{extension}"
+        os.mkdir(output_folder)
+    return output_folder
+        
+def final_output(arg_parser):
+    parser = arg_parser()
+    tissue = parser.tissue
+    output_folder = parser.directory
+    output_folder = check_outputdir(output_folder)
+    specificity_result = run_specificity(parser)
+    enrichment_result = run_enrichment(parser)
+    merged = pd.concat([specificity_result, enrichment_result], axis=1)
+    write_file(merged, f"All_genes_{tissue}.tsv", output_folder)
+    #Make query file
+
+"""specificity_threshold = 2
+enrichment_threshold = 2
 meta_samples = get_meta_samples(meta)
 matrix_samples = get_matrix_samples(matrix)
-check_meta_matrix_samples(meta, matrix)
-query_sex = "Female"
+query_sex = False
 age_category = "Days"
-query_age = 5
-query_tissue = "Brain"
+query_age = False
+query_tissue = "Head"
 query_specificity = True
 query_enrichment = True
-
-#print(run_specificity.head(10))
+output_path= "C:/Users/maike/Documents/University/Masters/Project"""
+meta = read_meta(argparse_analysis())
+matrix = read_matrix(argparse_analysis())
+check_meta_matrix_samples(meta, matrix)
+final_output(argparse_analysis)
 
 
 

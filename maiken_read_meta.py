@@ -2,14 +2,16 @@ import argparse
 import pandas as pd
 import re
 
-parser = argparse.ArgumentParser(description='Metadata reader\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--metadata', required=False, help='TSV file with columns for sample, sex, tissue and age')
-args = parser.parse_args()
-meta = args.metadata
+def argparse_meta():
+    parser = argparse.ArgumentParser(description='Metadata reader\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--metadata', required=False, help='TSV file with columns for sample, sex, tissue and age')
+    return parser.parse_args()
 
-def read_tsv(tsv):
-    frame = pd.read_csv(tsv, sep="\t")
-    return frame
+def read_meta(arg_parser):
+    parser = arg_parser()
+    tsv = parser.metadata
+    meta_pd = pd.read_csv(tsv, sep="\t")
+    return meta_pd
 
 def get_meta_cats(meta_pd):
     categories = set(meta_pd.columns)
@@ -54,53 +56,61 @@ def get_meta_sexes(meta_pd):
     else:
         return None
     
-def get_meta_tissues(meta_pd):
+def find_wholefly(string):
+    whole = bool(re.search("whole", string, re.IGNORECASE))
+    return whole    
+
+def get_meta_tissues(meta_pd, whole):
     if "Tissue" in get_meta_cats(meta_pd):
         tissues = set(meta_pd['Tissue'])
-        return tissues
+        if whole == False:
+            no_whole = []
+            for tis in tissues:
+                if find_wholefly(tis) == False:
+                    no_whole.append(tis)
+            return no_whole
+        else:
+            return tissues
     else:
         return None
 
 def check_wholelfly(meta_pd):
     if "Tissue" in get_meta_cats(meta_pd):
-        tissues= get_meta_tissues(meta_pd)
-        wholefly = bool(re.search("whole", str(tissues), re.IGNORECASE))
-        if wholefly:
-            return True
-        else:
-            return False
+        tissues= get_meta_tissues(meta_pd, True)
+        wholefly = find_wholefly(str(tissues))
+        return wholefly
     else:
         return False
 
 def check_specificity(meta_pd):
-    tissues= get_meta_tissues(meta_pd)
+    tissues= get_meta_tissues(meta_pd, False)
     tissue_count=len(tissues)
-    if check_wholelfly(meta_pd):
-        if tissue_count > 2:
-            return True
-    elif tissue_count > 1:
+    if tissue_count > 1:
         return True
     else:
         return False
 
 def check_enrichment(meta_pd):
     if check_wholelfly(meta_pd):
-        tissues= get_meta_tissues(meta_pd)
+        tissues= get_meta_tissues(meta_pd, True)
         tissue_count=len(tissues)
         if tissue_count > 1:
             return True
     else:
         return False
 
+def summary_dict():
+    dict = {}
+    meta= read_meta(argparse_meta)
+    dict["meta_sexes"] = get_meta_sexes(meta)
+    dict["age_category"] = get_age_categories(meta)
+    dict["meta_ages"] = get_meta_ages(meta)
+    dict["meta_tissues"] = get_meta_tissues(meta, False)
+    dict["specificity"] = check_specificity(meta)
+    dict["enrichment"] = check_enrichment(meta)
+    print(dict)
+    return dict
 
-"""meta_categories = get_meta_cats(meta)
-meta_samples = get_meta_samples(meta)
-meta_sexes = get_meta_sexes(meta)
-age_category = get_age_categories(meta)
-meta_ages = get_meta_ages(meta)
-meta_tissues = get_meta_tissues(meta)
-specificity = check_specificity(meta)
-enrichment = check_enrichment(meta)"""
 
 
 

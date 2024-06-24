@@ -8,9 +8,8 @@ def argparse_meta():
     return parser.parse_args()
 
 def read_meta(arg_parser):
-    parser = arg_parser()
-    tsv = parser.metadata
-    meta_pd = pd.read_csv(tsv, sep="\t")
+    meta_pd = arg_parser.metadata
+    meta_pd = pd.read_csv(meta_pd, sep="\t")
     return meta_pd
 
 def get_meta_cats(meta_pd):
@@ -108,9 +107,4 @@ def summary_dict():
     dict["meta_tissues"] = get_meta_tissues(meta, False)
     dict["specificity"] = check_specificity(meta)
     dict["enrichment"] = check_enrichment(meta)
-    print(dict)
     return dict
-
-
-
-

@@ -8,19 +8,45 @@ def argparse_meta():
     return parser.parse_args()
 
 def read_meta(arg_parser):
-    meta_pd = arg_parser.metadata
-    meta_pd = pd.read_csv(meta_pd, sep="\t")
-    return meta_pd
+    meta_file = arg_parser.metadata
+    try:
+        assert meta_file.endswith(".tsv")
+        try:
+            meta_pd = pd.read_csv(meta_file, sep="\t")
+            meta_pd = meta_pd.astype(str)
+            return meta_pd
+        except FileNotFoundError:
+            print(f"Metadata file {meta_file} does not exist")
+            raise SystemExit(1)
+    except AssertionError:
+        print(f"Metadata file needs to be in TSV format.")
+        raise SystemExit(1)
+    
+    
 
 def get_meta_cats(meta_pd):
     categories = set(meta_pd.columns)
-    assert "Sample" in categories
-    return categories
+    try:
+        assert "Sample" in categories
+        try:
+            assert "Tissue" in categories
+            return categories
+        except AssertionError:
+            print("Metadata does not contain tissue column")
+            raise SystemExit(1)
+    except AssertionError:
+        print("Metadata does not contain sample column")
+        raise SystemExit(1)
 
 def get_meta_samples(meta_pd):
-    samples= list(meta_pd["Sample"])
-    assert len(set(samples)) == len(samples)
-    return samples
+    samples= meta_pd["Sample"]
+    if not len(set(samples)) == len(list(samples)):
+        print("Metadata file contains duplicate samples. Analysis cancelled.")
+        raise SystemExit(1)
+    if samples.isnull().any():
+        print("Metadata file is missing data in 'Sample' column")
+        raise SystemExit(1)
+    return list(samples)
 
 def get_age_categories(meta_pd):
     if "Age" in get_meta_cats(meta_pd):  
@@ -82,8 +108,7 @@ def check_wholelfly(meta_pd):
         return False
 
 def check_specificity(meta_pd):
-    tissues= get_meta_tissues(meta_pd, False)
-    tissue_count=len(tissues)
+    tissue_count= len(get_meta_tissues(meta_pd, False))
     if tissue_count > 1:
         return True
     else:
@@ -91,8 +116,7 @@ def check_specificity(meta_pd):
 
 def check_enrichment(meta_pd):
     if check_wholelfly(meta_pd):
-        tissues= get_meta_tissues(meta_pd, True)
-        tissue_count=len(tissues)
+        tissue_count= len(get_meta_tissues(meta_pd, True))
         if tissue_count > 1:
             return True
     else:

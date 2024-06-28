@@ -3,6 +3,7 @@ import pandas as pd
 import re
 from maiken_read_meta import *
 import os
+from sys import argv
 
 def argparse_analysis():
     parser = argparse.ArgumentParser(description='Gene expression comparison\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -18,14 +19,39 @@ def argparse_analysis():
     parser.add_argument('--sex', help='Sex of interest')
     parser.add_argument('--age', help='Age of interest')
     parser.add_argument('--directory', required=True, help='Path to output directory')
+    parser.add_argument('--decimal', default='.', help='Character to recognize as decimal point')
     return parser.parse_args()
 
 
 def read_matrix(arg_parser):
-    matrix_pd = arg_parser.matrix
-    matrix_pd = pd.read_csv(matrix_pd, sep="\t")
-    genecolumn = matrix_pd.columns[0]
-    matrix_pd = matrix_pd.set_index(genecolumn).apply(pd.to_numeric)
+    matrix_file = arg_parser.matrix
+    decimal=arg_parser.decimal
+    try:
+        assert matrix_file.endswith(".tsv")
+        try: 
+            matrix_pd = pd.read_csv(matrix_file, decimal=decimal, sep="\t", index_col=0, low_memory=False)
+        except FileNotFoundError:
+            print(f"Matrix file '{matrix_file}' does not exist")
+            raise SystemExit(1)
+    except AssertionError:
+        print(f"Matrix file '{matrix_file}' needs to be in TSV format.")
+        raise SystemExit(1)
+    matrix_pd = matrix_pd.apply(pd.to_numeric, errors="coerce")
+    if matrix_pd.isnull().values.any():
+        matrix_pd = matrix_pd.fillna(0)
+        print(f"Matrix file '{arg_parser.matrix}' contains non-numeric datapoints, e.g. text or invalid decimal point, which has been converted to 0.0")
+    #matrix_pd.astype(float)
+    """try:
+        matrix_pd = matrix_pd.apply(pd.to_numeric).fillna(0)
+    except ValueError:
+        print(f"Matrix file '{arg_parser.matrix}' contains non-numeric values")
+        raise SystemExit(1)"""
+    matrix_samples = get_matrix_samples(matrix_pd)
+    try:
+        assert len(set(matrix_samples)) == len(matrix_samples)
+    except AssertionError:
+        print(f"Matrix file '{arg_parser.matrix}' contains duplicate samples IDs")
+        raise SystemExit(1)
     return matrix_pd
 
 def get_matrix_samples(matrix_pd):
@@ -37,14 +63,16 @@ def check_meta_matrix_samples(arg_parser):
     matrix_pd = read_matrix(arg_parser)
     meta_samples = get_meta_samples(meta_pd)
     matrix_samples = get_matrix_samples(matrix_pd)
-    try:
-        assert len(set(matrix_samples)) == len(matrix_samples)
-        assert set(meta_samples) == set(matrix_samples)
-    except AssertionError:
-        print("The samples IDs either contain duplicates or do not match between the metadata and the matrix")
+    if set(meta_samples) == (set(matrix_samples)):
+        return True
+    elif set(meta_samples).issubset(set(matrix_samples)):
+        print(f"INFO: Not all sample IDs in matrix '{arg_parser.matrix}' is present in metadata '{arg_parser.metadata}'. Analysis continued.")
+        return True
+    else:
+        print(f"The samples IDs do not match between {arg_parser.metadata} and {arg_parser.matrix}. Analysis cancelled.")
+        raise SystemExit(1)
 
 def query_dict(arg_parser, tis):
-    #tissue = arg_parser.tissue
     sex = arg_parser.sex
     age = arg_parser.age
     query = {}
@@ -62,9 +90,6 @@ def filter_samples(meta_pd, query):
         filtered_metadata = filtered_metadata[filtered_metadata[key] == value]
     return filtered_metadata['Sample']
 
-def write_file(data, filename, output_dir):
-    data.to_csv(f"{output_dir}/{filename}.tsv", sep='\t')
-
 def run_specificity(arg_parser, output_dir):
     specificity = arg_parser.s
     if specificity:
@@ -72,14 +97,15 @@ def run_specificity(arg_parser, output_dir):
         matrix_pd = read_matrix(arg_parser)
         threshold = float(arg_parser.sthres)
         tissue = arg_parser.tissue
+        permissive = arg_parser.permissive
         all_tissues = get_meta_tissues(meta_pd, False)
         non_target_means = {}
-        tissue = arg_parser.tissue
-        permissive = arg_parser.permissive
         for tis in all_tissues:
             if tis is not permissive:
                 query = query_dict(arg_parser, tis)
                 query_samples = filter_samples(meta_pd, query)
+                if len(query_samples) < 3:
+                    print(f"Specificity tissue '{tis}' only has {len(query_samples)} replicate(s) with age '{arg_parser.age}' and sex '{arg_parser.sex}'")
                 query_matrix = matrix_pd[query_samples]
                 query_mean = query_matrix.mean(axis=1)
                 if tis == tissue:
@@ -90,8 +116,10 @@ def run_specificity(arg_parser, output_dir):
         result = main_mean/non_target_means
         result= result.apply(lambda x: True if x >= threshold else False)
         result.name = "Specificity"
-        output = result[result == True]
-        write_file(output, f"Specific_to_{tissue}", output_dir)
+        output = result[result == True].index
+        with open(f"{output_dir}/Specific_to_{tissue}.tsv", "w") as specific_file:
+            for gene in output:
+                specific_file.write(f"{gene}\n")
         return result
 
 def run_enrichment(arg_parser, output_dir):
@@ -107,6 +135,8 @@ def run_enrichment(arg_parser, output_dir):
             if find_wholefly(tis) == True or tis == tissue:
                 query = query_dict(arg_parser, tis)
                 query_samples = filter_samples(meta_pd, query)
+                if len(query_samples) < 3:
+                    print(f"Enrichment tissue '{tis}' only has {len(query_samples)} replicate(s) with age '{arg_parser.age}' and sex '{arg_parser.sex}'")
                 query_matrix = matrix_pd[query_samples]
                 query_mean = query_matrix.mean(axis=1)
                 query_mean= query_mean.mask(query_mean < background_threshold, 2)
@@ -117,8 +147,10 @@ def run_enrichment(arg_parser, output_dir):
         result = main_mean/whole_mean
         result= result.apply(lambda x: True if x >= threshold else False)
         result.name = "Enrichment"
-        output = result[result == True]
-        write_file(output, f"Enriched_in_{tissue}", output_dir)
+        output = result[result == True].index
+        with open(f"{output_dir}/Enriched_in_{tissue}.tsv", "w") as enriched_file:
+            for gene in output:
+                enriched_file.write(f"{gene}\n")
         return result
 
 def check_outputdir(output_dir):
@@ -142,9 +174,12 @@ def execute_analysis():
     specificity_result = run_specificity(arg_parser, output_dir)
     enrichment_result = run_enrichment(arg_parser, output_dir)
     merged = pd.concat([specificity_result, enrichment_result], axis=1)
-    write_file(merged, f"All_genes_{tissue}.tsv", output_dir)
-    #Make query file
+    merged.to_csv(f"{output_dir}/Genes_in_{tissue}.tsv", sep='\t')
 
+    with open(F"{output_dir}/Query_parameters.tsv", "w") as param_file:
+        param_file.write(f"Commandline used:\n")
+        for param in argv[1:]:
+            param_file.write(f"{param} ")
 
 
 

@@ -1,6 +1,16 @@
 import argparse
 import pandas as pd
 import re
+import logging
+
+def meta_logger(log):
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler(f'metadata_error.log')
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter('%(levelname)s - %(asctime)s - %(message)s'))
+    logger.addHandler(fh)
+    return logger.error(log)
 
 def argparse_meta():
     parser = argparse.ArgumentParser(description='Metadata reader\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -14,15 +24,16 @@ def read_meta(arg_parser):
         try:
             meta_pd = pd.read_csv(meta_file, sep="\t")
             meta_pd = meta_pd.astype(str)
+            for column in meta_pd.columns:
+                meta_pd[column]= meta_pd[column].str.strip()
+                meta_pd[column]= meta_pd[column].str.replace(" ","_")
             return meta_pd
         except FileNotFoundError:
-            print(f"Metadata file {meta_file} does not exist")
+            meta_logger(f"Metadata file {meta_file} does not exist")
             raise SystemExit(1)
     except AssertionError:
-        print(f"Metadata file needs to be in TSV format.")
+        meta_logger(f"Metadata file needs to be in TSV format.")
         raise SystemExit(1)
-    
-    
 
 def get_meta_cats(meta_pd):
     categories = set(meta_pd.columns)
@@ -32,19 +43,19 @@ def get_meta_cats(meta_pd):
             assert "Tissue" in categories
             return categories
         except AssertionError:
-            print("Metadata does not contain tissue column")
+            meta_logger("Metadata does not contain tissue column")
             raise SystemExit(1)
     except AssertionError:
-        print("Metadata does not contain sample column")
+        meta_logger("Metadata does not contain sample column")
         raise SystemExit(1)
 
 def get_meta_samples(meta_pd):
     samples= meta_pd["Sample"]
     if not len(set(samples)) == len(list(samples)):
-        print("Metadata file contains duplicate samples. Analysis cancelled.")
+        meta_logger("Metadata file contains duplicate samples. Analysis cancelled.")
         raise SystemExit(1)
     if samples.isnull().any():
-        print("Metadata file is missing data in 'Sample' column")
+        meta_logger("Metadata file is missing data in 'Sample' column")
         raise SystemExit(1)
     return list(samples)
 
@@ -93,7 +104,7 @@ def get_meta_tissues(meta_pd, whole):
             for tis in tissues:
                 if find_wholefly(tis) == False:
                     no_whole.append(tis)
-            return no_whole
+            return set(no_whole)
         else:
             return tissues
     else:
@@ -124,7 +135,7 @@ def check_enrichment(meta_pd):
 
 def summary_dict():
     dict = {}
-    meta= read_meta(argparse_meta)
+    meta= read_meta(argparse_meta())
     dict["meta_sexes"] = get_meta_sexes(meta)
     dict["age_category"] = get_age_categories(meta)
     dict["meta_ages"] = get_meta_ages(meta)

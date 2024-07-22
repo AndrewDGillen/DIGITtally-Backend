@@ -14,7 +14,7 @@ def meta_logger(log):
 
 def argparse_meta():
     parser = argparse.ArgumentParser(description='Metadata reader\n', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--metadata', required=False, help='TSV file with columns for sample, sex, tissue and age')
+    parser.add_argument('--metadata', help='TSV file with columns for sample, sex, tissue and age')
     return parser.parse_args()
 
 def read_meta(arg_parser):

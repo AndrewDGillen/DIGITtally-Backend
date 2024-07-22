@@ -15,7 +15,7 @@ def argparse_analysis():
     parser.add_argument('-e', action='store_true', help='Run enrichment True/False')
     parser.add_argument('--ethres', default = 2, type=float, help='Threshold ratio for enrichment')
     parser.add_argument('--bthres', default = 2, type=float, help='Background threshold for gene count')
-    parser.add_argument('--tissue', default = [], action = 'append', type = str, help='Tissue of interest')
+    parser.add_argument('--tissue', default = [], nargs='*', type = str, help='Tissue of interest')
     parser.add_argument('--permissive', default = [], nargs='*', type = str, help='Tissue to leave out of the analysis')
     parser.add_argument('--sex', default = [], nargs='*', type = str, help='Sex of interest')
     parser.add_argument('--age', default = [], nargs='*', type = str, help='Age of interest')
@@ -24,13 +24,13 @@ def argparse_analysis():
     return parser.parse_args()
 
 class Tissue_expression_analyser:
-    def __init__(self, arg_parser): #matrix, metadata, s, e, ethres, bthres, tissue, permissive, sex, age, directory, decimal):
+    def __init__(self, arg_parser):
         self.directory = arg_parser.directory
         self.outputdir = self.check_outputdir() 
         self.matrix = arg_parser.matrix
         self.meta = arg_parser.metadata
         self.decimal = arg_parser.decimal
-        self.matrix_pd = self.read_matrix()#arg_parser.decimal)
+        self.matrix_pd = self.read_matrix()
         self.meta_pd = read_meta(arg_parser)
         self.specificity = arg_parser.s
         self.enrichment = arg_parser.e
@@ -89,7 +89,7 @@ class Tissue_expression_analyser:
         matrix_pd = matrix_pd.apply(pd.to_numeric, errors="coerce")
         if matrix_pd.isnull().values.any():
             matrix_pd = matrix_pd.fillna(0)
-            self.info_log(f"Matrix file '{self.matrix}' contains non-numeric datapoints, e.g. text or invalid decimal point, which has been converted to 0.0")
+            self.info_log(f"Matrix file '{self.matrix}' contains non-numeric datapoints, e.g. text, missing data, or invalid decimal point, which has been converted to 0.0")
         return matrix_pd
 
     def get_matrix_samples(self):
@@ -98,7 +98,7 @@ class Tissue_expression_analyser:
             assert len(set(samples)) == len(samples)
             return samples
         except AssertionError:
-            self.error_log(f"Matrix file '{self.matrix}' contains duplicate samples IDs. Analysis cancelled.")
+            self.error_log(f"Matrix file '{self.matrix}' contains duplicate samples IDs.")
             raise SystemExit(1)
         
     def check_meta_matrix_samples(self):
@@ -134,11 +134,11 @@ class Tissue_expression_analyser:
     def run_specificity(self, tissue):
         specificity = self.specificity
         if specificity:
-            threshold = float(self.sthres)
             all_tissues = get_meta_tissues(self.meta_pd, False)
+            other_targets= list(filter(lambda x: x!=tissue, self.tissue))
             non_target_means = {}
             for tis in all_tissues:
-                if tis not in self.permissive:
+                if tis not in self.permissive and tis not in other_targets:
                     query = self.query_dict(tis)
                     query_samples = self.filter_samples(query)
                     if len(query_samples) < 3:
@@ -146,13 +146,13 @@ class Tissue_expression_analyser:
                     query_matrix = self.matrix_pd[query_samples]
                     query_mean = query_matrix.mean(axis=1)
                     query_mean= query_mean.mask(query_mean < self.bthres, self.bthres)
-                    if tis in tissue:
-                        main_mean = query_mean
+                    if tis == tissue: ###
+                        target_mean = query_mean
                     else:
                         non_target_means[tis] = (list(query_mean))
             non_target_means = pd.DataFrame(non_target_means, index=self.matrix_pd.index).max(axis=1)
-            result = main_mean/non_target_means
-            result= result.apply(lambda x: True if x >= threshold else False)
+            result = target_mean/non_target_means
+            result= result.apply(lambda x: True if x >= self.sthres else False)
             result.name = "Specificity"
             output = result[result == True].index
             with open(f"{self.outputdir}/{tissue}_specificity.tsv", "w") as specific_file:
@@ -187,27 +187,52 @@ class Tissue_expression_analyser:
         
 def execute_analysis():
     arg_parser = Tissue_expression_analyser(argparse_analysis())
-    output_dir = arg_parser.outputdir
-    arg_parser.check_meta_matrix_samples()
-    for tissue in arg_parser.tissue:
-        specificity_result = arg_parser.run_specificity(tissue)
-        enrichment_result = arg_parser.run_enrichment(tissue)
-        merged = pd.concat([specificity_result, enrichment_result], axis=1)
-        merged.to_csv(f"{output_dir}/{tissue}_expression.tsv", sep='\t')
+    if len(arg_parser.tissue) > 0:
+        output_dir = arg_parser.outputdir
+        arg_parser.check_meta_matrix_samples()
+        combined_specificity = None
+        combined_enrichment = None
+        for tissue in arg_parser.tissue:
+            specificity_result = arg_parser.run_specificity(tissue)
+            enrichment_result = arg_parser.run_enrichment(tissue)
+            if specificity_result is not None or enrichment_result is not None:
+                merged = pd.concat([specificity_result, enrichment_result], axis=1)
+                merged.to_csv(f"{output_dir}/{tissue}_expression.tsv", sep='\t')
+            if combined_specificity is None:
+                combined_specificity = specificity_result
+            else:
+                combined_specificity = combined_specificity & specificity_result
+            if combined_enrichment is None:
+                combined_enrichment = enrichment_result
+            else:
+                combined_enrichment = combined_enrichment & enrichment_result
+        if specificity_result is not None or enrichment_result is not None:
+            combined_merged = pd.concat([combined_specificity, combined_enrichment], axis=1)
+            combined_merged.to_csv(f"{output_dir}/target_tissues_expression.tsv", sep='\t')
+        if combined_specificity is not None:
+            combined_specificity = combined_specificity[combined_specificity == True].index
+            with open(f"{output_dir}/target_tissues_specificity.tsv", "w") as comb_spec_file:
+                for gene in combined_specificity:
+                    comb_spec_file.write(f"{gene}\n")
+        if combined_enrichment is not None:
+            combined_enrichment = combined_enrichment[combined_enrichment == True].index
+            with open(f"{output_dir}/target_tissues_enrichment.tsv", "w") as comb_enrich_file:
+                for gene in combined_enrichment:
+                    comb_enrich_file.write(f"{gene}\n")
     arg_parser.info_log(f"Parameters used:\n\
     Directory: {arg_parser.directory}\n\
     Matrix file: {arg_parser.matrix}\n\
     Metadata file: {arg_parser.meta}\n\
     Decimal point: {arg_parser.decimal}\n\
-    Specificity: {arg_parser.specificity}\n\
-    Enrichment: {arg_parser.enrichment}\n\
+    Run specificity: {arg_parser.specificity}\n\
+    Run enrichment: {arg_parser.enrichment}\n\
     Specificity threshold:{arg_parser.sthres}\n\
     Enrichment threshold:{arg_parser.ethres}\n\
     Background threshold:{arg_parser.bthres}\n\
-    Tissue(s) of interest: {arg_parser.tissue}\n\
-    Permissive tissue(s): {arg_parser.permissive}\n\
-    Sex(es) of interest: {arg_parser.sex}\n\
-    Age(s) of interest: {arg_parser.age}")
+    Tissue(s) of interest: {", ".join(arg_parser.tissue)}\n\
+    Permissive tissue(s): {", ".join(arg_parser.permissive)}\n\
+    Sex(es) of interest: {", ".join(arg_parser.sex)}\n\
+    Age(s) of interest: {", ".join(arg_parser.age)}")
 
 
 

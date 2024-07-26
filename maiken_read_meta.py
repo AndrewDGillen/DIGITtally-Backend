@@ -2,11 +2,15 @@ import argparse
 import pandas as pd
 import re
 import logging
+import json
+
+with open('/media/ag_jdowlab/Seagate/DIGITtally-Staging/dt-config.json') as config_file:
+    config = json.load(config_file)
 
 def meta_logger(log):
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler(f'metadata_error.log')
+    fh = logging.FileHandler(f'{config["LogLocation"]}/metadata_error.log')
     fh.setLevel(logging.INFO)
     fh.setFormatter(logging.Formatter('%(levelname)s - %(asctime)s - %(message)s'))
     logger.addHandler(fh)
@@ -143,3 +147,15 @@ def summary_dict():
     dict["specificity"] = check_specificity(meta)
     dict["enrichment"] = check_enrichment(meta)
     return dict
+
+def get_meta_settings(metafile):
+    meta_dict = {}
+    meta= read_meta(metafile)
+
+    meta_dict["meta_sexes"] = get_meta_sexes(meta)
+    meta_dict["age_category"] = get_age_categories(meta)
+    meta_dict["meta_ages"] = get_meta_ages(meta)
+    meta_dict["meta_tissues"] = get_meta_tissues(meta, False)
+    meta_dict["specificity"] = check_specificity(meta)
+    meta_dict["enrichment"] = check_enrichment(meta)
+    return meta_dict

@@ -30,7 +30,7 @@ def populate_weight_dicts(broad, specific):
 
         if specific_weights[data_source[0]]['GLOBAL'] == 0:
             pass_source.append(data_source[0])
-    
+
     return broad_weights, specific_weights, pass_source
 
 #Populates information from the "DIGITtally starter" file generated from GOIAgglomerator.
@@ -223,7 +223,7 @@ def process_orthology(folder, data_by_id, species, id_by_symbol, synonyms):
 #Now that results dicts are populated, we weight based on what modules the user ACTUALLY wants to contribute to their score
 def weight_results(data_by_id, broad_weights, specific_weights):
     weighted_data = defaultdict(list)
-
+    print(broad_weights)
     header = ['FlyBase ID', 'Gene Symbol', 'Specific Transcripts found in tissues of interest (from FlyAtlas2)', ' ']
 
     score_by_id = defaultdict(lambda: 0)
@@ -317,9 +317,9 @@ def create_digittally_output(folder, weighted_data, tally_header, symbol_by_id, 
 
             OUTdigittally.writerow(outrow)
 
-def WrapUp(tally_file_folder, synonym_file, broad_categories, flyatlas1, flyatlas2, flycellatlas, flybase, orthology, species):
+def WrapUp(tally_file_folder, synonym_file, broad_categories, userupload, flyatlas1, flyatlas2, flycellatlas, flybase, orthology, species):
 
-    specific_data_sources = [('FlyAtlas1', flyatlas1), ('FlyAtlas2', flyatlas2), ('FlyCellAtlas', flycellatlas), ('FlyBase', flybase), ('ortho', orthology)]
+    specific_data_sources = [("UserUpload", userupload), ('FlyAtlas1', flyatlas1), ('FlyAtlas2', flyatlas2), ('FlyCellAtlas', flycellatlas), ('FlyBase', flybase), ('ortho', orthology)]
 
     broad_weights, specific_weights, passsource = populate_weight_dicts(broad_categories, specific_data_sources)
     

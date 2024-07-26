@@ -20,13 +20,16 @@ def argparse_analysis():
     parser.add_argument('--sex', default = [], nargs='*', type = str, help='Sex of interest')
     parser.add_argument('--age', default = [], nargs='*', type = str, help='Age of interest')
     parser.add_argument('--directory', required=True, type = str, help='Path to output directory')
+    parser.add_argument('--logdir', required=True, type = str, help='Path to logging directory')
     parser.add_argument('--decimal', default='.', type = str, help='Character to recognize as decimal point in matrix values')
+    
     return parser.parse_args()
 
 class Tissue_expression_analyser:
     def __init__(self, arg_parser):
         self.directory = arg_parser.directory
-        self.outputdir = self.check_outputdir() 
+        self.outputdir = self.check_outputdir()
+        self.logdir = arg_parser.logdir 
         self.matrix = arg_parser.matrix
         self.meta = arg_parser.metadata
         self.decimal = arg_parser.decimal
@@ -59,7 +62,7 @@ class Tissue_expression_analyser:
         logger = logging.getLogger()
         if not logger.hasHandlers():
             logger.setLevel(logging.DEBUG)
-            fh = logging.FileHandler(f'{self.outputdir}/runtime_error.log')
+            fh = logging.FileHandler(f'{self.logdir}/runtime_error.log')
             fh.setLevel(logging.ERROR)
             fh.setFormatter(logging.Formatter('%(levelname)s - %(asctime)s - %(message)s'))
             logger.addHandler(fh)
@@ -69,7 +72,7 @@ class Tissue_expression_analyser:
         logger = logging.getLogger()
         if not logger.hasHandlers():
             logger.setLevel(logging.DEBUG)
-            fh = logging.FileHandler(f'{self.outputdir}/runtime_info.log')
+            fh = logging.FileHandler(f'{self.logdir}/runtime_info.log')
             fh.setLevel(logging.INFO)
             fh.setFormatter(logging.Formatter('%(levelname)s - %(asctime)s - %(message)s'))
             logger.addHandler(fh)
@@ -185,8 +188,13 @@ class Tissue_expression_analyser:
                     enriched_file.write(f"{gene}\n")
             return result
         
-def execute_analysis():
-    arg_parser = Tissue_expression_analyser(argparse_analysis())
+def execute_analysis(artificial_args=None):
+
+    if artificial_args:
+        arg_parser = Tissue_expression_analyser(artificial_args)
+    else:
+        arg_parser = Tissue_expression_analyser(argparse_analysis())
+
     if len(arg_parser.tissue) > 0:
         output_dir = arg_parser.outputdir
         arg_parser.check_meta_matrix_samples()
@@ -216,6 +224,7 @@ def execute_analysis():
                     comb_spec_file.write(f"{gene}\n")
         if combined_enrichment is not None:
             combined_enrichment = combined_enrichment[combined_enrichment == True].index
+
             with open(f"{output_dir}/target_tissues_enrichment.tsv", "w") as comb_enrich_file:
                 for gene in combined_enrichment:
                     comb_enrich_file.write(f"{gene}\n")
@@ -234,5 +243,7 @@ def execute_analysis():
     Sex(es) of interest: {", ".join(arg_parser.sex)}\n\
     Age(s) of interest: {", ".join(arg_parser.age)}")
 
+    return output_dir
 
-
+if __name__ == '__main__':
+    execute_analysis()

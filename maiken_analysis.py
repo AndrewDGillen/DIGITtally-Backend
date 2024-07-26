@@ -11,9 +11,9 @@ def argparse_analysis():
     parser.add_argument('--metadata', required=True, help='TSV file with columns for sample, sex, tissue and age')
     parser.add_argument('--matrix', required=True, help='File containing gene/sample matrix of gene expression estimates')
     parser.add_argument('-s', action='store_true', help='Run specificity True/False')
-    parser.add_argument('--sthres', default = 2, type=float, help='Threshold ratio for specificity')
+    parser.add_argument('--sthres', default = 1, type=float, help='Threshold ratio for specificity')
     parser.add_argument('-e', action='store_true', help='Run enrichment True/False')
-    parser.add_argument('--ethres', default = 2, type=float, help='Threshold ratio for enrichment')
+    parser.add_argument('--ethres', default = 2.5, type=float, help='Threshold ratio for enrichment')
     parser.add_argument('--bthres', default = 2, type=float, help='Background threshold for gene count')
     parser.add_argument('--tissue', default = [], nargs='*', type = str, help='Tissue of interest')
     parser.add_argument('--permissive', default = [], nargs='*', type = str, help='Tissue to leave out of the analysis')
@@ -132,8 +132,7 @@ class Tissue_expression_analyser:
         return filtered_metadata['Sample']
 
     def run_specificity(self, tissue):
-        specificity = self.specificity
-        if specificity:
+        if self.specificity:
             all_tissues = get_meta_tissues(self.meta_pd, False)
             other_targets= list(filter(lambda x: x!=tissue, self.tissue))
             non_target_means = {}
@@ -146,7 +145,7 @@ class Tissue_expression_analyser:
                     query_matrix = self.matrix_pd[query_samples]
                     query_mean = query_matrix.mean(axis=1)
                     query_mean= query_mean.mask(query_mean < self.bthres, self.bthres)
-                    if tis == tissue: ###
+                    if tis == tissue:
                         target_mean = query_mean
                     else:
                         non_target_means[tis] = (list(query_mean))
@@ -173,10 +172,10 @@ class Tissue_expression_analyser:
                     query_mean = query_matrix.mean(axis=1)
                     query_mean= query_mean.mask(query_mean < self.bthres, self.bthres)
                     if tis == tissue:
-                        main_mean = query_mean
+                        target_mean = query_mean
                     else:
                         whole_mean = query_mean
-            result = main_mean/whole_mean
+            result = target_mean/whole_mean
             result= result.apply(lambda x: True if x >= self.ethres else False)
             result.name = "Enrichment"
             output = result[result == True].index

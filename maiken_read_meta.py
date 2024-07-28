@@ -27,10 +27,6 @@ def read_meta(arg_parser):
         assert meta_file.endswith(".tsv")
         try:
             meta_pd = pd.read_csv(meta_file, sep="\t")
-            meta_pd = meta_pd.astype(str)
-            for column in meta_pd.columns:
-                meta_pd[column]= meta_pd[column].str.strip()
-                meta_pd[column]= meta_pd[column].str.replace(" ","_")
             return meta_pd
         except FileNotFoundError:
             meta_logger(f"Metadata file {meta_file} does not exist")
@@ -47,32 +43,33 @@ def get_meta_cats(meta_pd):
             assert "Tissue" in categories
             return categories
         except AssertionError:
-            meta_logger("Metadata does not contain tissue column")
+            meta_logger("Metadata does not contain 'Tissue' column")
             raise SystemExit(1)
     except AssertionError:
-        meta_logger("Metadata does not contain sample column")
+        meta_logger("Metadata does not contain 'Sample' column")
         raise SystemExit(1)
 
 def get_meta_samples(meta_pd):
     samples= meta_pd["Sample"]
     if not len(set(samples)) == len(list(samples)):
-        meta_logger("Metadata file contains duplicate samples. Analysis cancelled.")
+        meta_logger("Metadata file contains duplicate sample IDs.")
         raise SystemExit(1)
     if samples.isnull().any():
         meta_logger("Metadata file is missing data in 'Sample' column")
         raise SystemExit(1)
+    samples = samples.astype(str)
     return list(samples)
 
 def get_age_categories(meta_pd):
     if "Age" in get_meta_cats(meta_pd):  
-        def search_age(pattern, meta_pd):
-            match= re.search(pattern, str(set(meta_pd['Age'])), re.IGNORECASE)
+        def search_age(pattern):
+            match= re.search(pattern, str(set(meta_pd['Age'].dropna())), re.IGNORECASE)
             if match:
                 return True
             else:
                 return False
-        days =search_age(r'\d', meta_pd)
-        stage =search_age("[A-Za-z]", meta_pd)
+        days =search_age(r'\d')
+        stage =search_age("[A-Za-z]")
         if days == True and stage == True:
             return("Mixed")
         elif days == True:
@@ -83,15 +80,15 @@ def get_age_categories(meta_pd):
         return None
     
 def get_meta_ages(meta_pd):
-    if "Age" in get_meta_cats(meta_pd):  
-        ages = set(meta_pd["Age"])
+    if "Age" in get_meta_cats(meta_pd):
+        ages = set(meta_pd["Age"].dropna().astype(str))
         return ages
     else:
         return None   
 
 def get_meta_sexes(meta_pd):
     if "Sex" in get_meta_cats(meta_pd):
-        sexes = set(meta_pd['Sex'])
+        sexes = set(meta_pd['Sex'].dropna().astype(str))
         return sexes
     else:
         return None
@@ -102,7 +99,7 @@ def find_wholefly(string):
 
 def get_meta_tissues(meta_pd, whole):
     if "Tissue" in get_meta_cats(meta_pd):
-        tissues = set(meta_pd['Tissue'])
+        tissues = set(meta_pd['Tissue'].dropna().astype(str))
         if whole == False:
             no_whole = []
             for tis in tissues:
@@ -140,6 +137,7 @@ def check_enrichment(meta_pd):
 def summary_dict():
     dict = {}
     meta= read_meta(argparse_meta())
+    get_meta_samples(meta)
     dict["meta_sexes"] = get_meta_sexes(meta)
     dict["age_category"] = get_age_categories(meta)
     dict["meta_ages"] = get_meta_ages(meta)
@@ -151,7 +149,7 @@ def summary_dict():
 def get_meta_settings(metafile):
     meta_dict = {}
     meta= read_meta(metafile)
-
+    get_meta_samples(meta)
     meta_dict["meta_sexes"] = get_meta_sexes(meta)
     meta_dict["age_category"] = get_age_categories(meta)
     meta_dict["meta_ages"] = get_meta_ages(meta)

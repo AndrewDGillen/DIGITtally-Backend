@@ -46,7 +46,7 @@ class Tissue_expression_analyser:
         self.age = arg_parser.age
         
     def check_outputdir(self):
-            output_dir= f"{self.directory}/Expression analysis"
+            output_dir= f"{self.directory}/Userdata analysis"
             if os.path.exists(output_dir) == False:
                 os.mkdir(output_dir)
             else:

@@ -9,6 +9,8 @@ def generic_score_weighting(score_string, source_context):
             actual_metric = item.split('_')[1].title()
             metric_weight = source_context[item]
 
+            if metric_weight == None:
+                metric_weight = 0
             score_string = score_string + f';{actual_metric}:{metric_weight}'
     
     return score_string
@@ -29,6 +31,16 @@ def UserUpload(usr_context, usr_file_locations, score_string, outputfolder, conf
 
     from argparse import Namespace
 
+    if usr_context['flytypes_selected'] == ["NA"]:
+        sex_submission = []
+    else:
+        sex_submission=usr_context['flytypes_selected']
+
+    if usr_context['ages_selected'] == ["NA"]:
+        age_submission = []
+    else:
+        age_submission=usr_context['ages_selected']
+
     print("Imports OK")
     #We manually define arguments for the UserSample analysis program
     arg_object = Namespace(
@@ -41,9 +53,9 @@ def UserUpload(usr_context, usr_file_locations, score_string, outputfolder, conf
         bthres=usr_context['metricthreshold_background'],
         tissue=usr_context['tissues_selected'],
         permissive=usr_context['permitted'],
-        sex=usr_context['flytypes_selected'],
-        age=usr_context['ages_selected'],
         directory=outputfolder,
+        age=age_submission,
+        sex=sex_submission,
         logdir=config["LogLocation"],
         decimal=usr_context['usr_decimalpoint']
         )

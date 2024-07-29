@@ -104,10 +104,10 @@ def get_meta_tissues(meta_pd, whole):
             no_whole = []
             for tis in tissues:
                 if find_wholefly(tis) == False:
-                    no_whole.append(tis)
+                    no_whole.append(tis.strip())
             return set(no_whole)
         else:
-            return tissues
+            return set(x.strip() for x in tissues)
     else:
         return None
 

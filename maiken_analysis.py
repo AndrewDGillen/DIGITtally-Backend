@@ -315,6 +315,6 @@ def execute_analysis(artificial_args=None):
     #The output directory is returned for when the script from another main script, for this subdirectory to be added to the main output directory
     return output_dir
 
-#This bit makes it easier to run the analysis locally (useful for testing)
+#This bit makes it easier to run the analysis locally (useful for testing).
 if __name__ == '__main__':
     execute_analysis()

@@ -136,12 +136,12 @@ def get_meta_tissues(meta_pd, whole):
                     raise SystemExit(1)
             #A list is made without the wholefly tissue, for the user to select target tissues from, and to loop over in the specificity analysis
             else:
-                no_whole.append(tis)
+                no_whole.append(tis.strip())
         #Sets of tissues with or without the wholefly "tissue" can be returned depending on need
         if whole == False:
             return set(no_whole)
         else:
-            return tissues
+            return set(x.strip() for x in tissues)
     else:
         return None
 

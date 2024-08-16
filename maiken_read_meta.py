@@ -3,10 +3,14 @@ import pandas as pd
 import re
 import logging
 import json
+import os 
 
-#This send the error messages to the DIGITtally backend
-with open('/media/ag_jdowlab/Seagate/DIGITtally-Staging/dt-config.json') as config_file:
-    config = json.load(config_file)
+config_file = '/media/ag_jdowlab/Seagate/DIGITtally-Staging/dt-config.json'
+if os.path.isfile(config_file):
+    with open(config_file) as config_file_in:
+        config = json.load(config_file_in)
+else:
+    config={'LogLocation':os.getcwd()}
 
 def meta_logger(log):
     logger = logging.getLogger()

@@ -21,7 +21,7 @@ def argparse_analysis():
     parser.add_argument('--sex', default = [], nargs='*', type = str, help='Sex of interest')
     parser.add_argument('--age', default = [], nargs='*', type = str, help='Age of interest')
     parser.add_argument('--directory', required=True, type = str, help='Path to output directory')
-    parser.add_argument('--logdir', required=True, type = str, help='Path to logging directory')
+    parser.add_argument('--logdir', default=os.getcwd(), type = str, help='Path to logging directory')
     parser.add_argument('--decimal', default='.', type = str, help='Character to recognize as decimal point in matrix values')
     
     return parser.parse_args()

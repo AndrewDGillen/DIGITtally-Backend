@@ -6,7 +6,7 @@ def generic_score_weighting(score_string, source_context):
     for item in source_context:
         if "metricweight" in item:
 
-            actual_metric = item.split('_')[1]
+            actual_metric = item.split('_')[1].title()
             metric_weight = source_context[item]
 
             score_string = score_string + f';{actual_metric}:{metric_weight}'
@@ -18,6 +18,48 @@ def build_orthology_weightstring(source_context):
     score_weightstring = f'Enrichment:{source_context["metricweight_Enrichment"]};Specificity:{source_context["metricweight_Specificity"]};Expression:{source_context["metricweight_Any"]}'
     
     return score_weightstring
+
+def UserUpload(usr_context, usr_file_locations, score_string, outputfolder, config):
+
+    try:
+        import MS_UserSample_Analyse
+    except Exception as e:
+        print(e)
+        exit(1)
+
+    from argparse import Namespace
+
+    print("Imports OK")
+    #We manually define arguments for the UserSample analysis program
+    arg_object = Namespace(
+        metadata=usr_file_locations['meta_matrix'],
+        matrix=usr_file_locations['expression_matrix'],
+        s=usr_context['use_usr_specificity'],
+        sthres=usr_context['metricthreshold_specificity'],
+        e=usr_context['use_usr_enrichment'],
+        ethres=usr_context['metricthreshold_enrichment'],
+        bthres=usr_context['metricthreshold_background'],
+        tissue=usr_context['tissues_selected'],
+        permissive=usr_context['permitted'],
+        sex=usr_context['flytypes_selected'],
+        age=usr_context['ages_selected'],
+        directory=outputfolder,
+        logdir=config["LogLocation"],
+        decimal=usr_context['usr_decimalpoint']
+        )
+    
+    print("starting analysis")
+
+    try:
+        usr_outloc = MS_UserSample_Analyse.execute_analysis(artificial_args=arg_object) 
+        usr_score_weights = generic_score_weighting(score_string, usr_context)
+    except Exception as e:
+        print(e)
+        exit(1)
+    
+    print(usr_score_weights)
+
+    return usr_score_weights, usr_outloc
 
 def FA1(fa1_context, score_string, outputfolder):
 
@@ -180,7 +222,7 @@ def FA2(fa2_context, sql_settings, score_string, outputfolder):
 
     return fa2_location, fa2_extra_location, weightstring, score_weights, extracheck
 
-def StartTallying(context, fa1_location, fa1_extra_location, fa1weightstring, fa2_location, fa2_extra_location, fa2weightstring, outputfolder):
+def StartTallying(context, fa1_location, fa1_extra_location, fa1weightstring, fa2_location, fa2_extra_location, fa2weightstring, outputfolder, usr_folder, usr_weights):
     import GOIAgglomerator
 
     if 'GeneList' in context:
@@ -211,13 +253,31 @@ def StartTallying(context, fa1_location, fa1_extra_location, fa1weightstring, fa
 
     infofile = "AssociatedFiles/FlyBase_GenesvTranscriptsvSymbols.tsv"
     secondaryannotations = "AssociatedFiles/FlyBase_SecondaryAnnotations.tsv"
+    synonymfile = 'AssociatedFiles/FlyBase_Synonyms.tsv'
 
     weightsfa1 = fa1weightstring
     weightsfa2 = fa2weightstring
     maxlen = 250
     
     try:
-        GOIAgglomerator.make_tally_basics(preexisting_list, fa1_folder, fa2_folder, fa1extra, fa2extra, mode, outputlists, outputtally, infofile, secondaryannotations, weightsfa1, weightsfa2, maxlen)
+        GOIAgglomerator.make_tally_basics(
+            preexisting_list, 
+            fa1_folder, 
+            fa2_folder, 
+            usr_folder, 
+            fa1extra, 
+            fa2extra, 
+            mode, 
+            outputlists, 
+            outputtally, 
+            infofile, 
+            secondaryannotations, 
+            weightsfa1, 
+            weightsfa2, 
+            usr_weights, 
+            maxlen,
+            synonymfile,
+            )
     except Exception as e:
         print(e)
 
@@ -549,7 +609,7 @@ def gather_global_weights(context):
 
     return broad_score_string
 
-def CompleteAnalysis(global_score_weights, fa1weights, fa2weights, fcaweights, fbweights, orthoweights, orthospecies,outputfolder):
+def CompleteAnalysis(global_score_weights, usr_weights, fa1weights, fa2weights, fcaweights, fbweights, orthoweights, orthospecies,outputfolder):
     import Finalise_DIGITtally
 
     tally_file_folder = f'{outputfolder}/Tally_files'
@@ -562,7 +622,7 @@ def CompleteAnalysis(global_score_weights, fa1weights, fa2weights, fcaweights, f
     orthology = orthoweights
     species = orthospecies
 
-    Finalise_DIGITtally.WrapUp(tally_file_folder, synonym_file, broad_categories, flyatlas1, flyatlas2, flycellatlas, flybase, orthology, species)
+    Finalise_DIGITtally.WrapUp(tally_file_folder, synonym_file, broad_categories, usr_weights, flyatlas1, flyatlas2, flycellatlas, flybase, orthology, species)
 
 #This function co-ordinates the parts of DIGITtally, running components as requested and collecting variables for the final tally calculations
 def run_from_backbone(context, folder_addendum):
@@ -611,6 +671,16 @@ def run_from_backbone(context, folder_addendum):
         }
 
         extra_threshold_sources = []
+        
+        #Handles User-Uploaded datasets, passes needed variables to the Agglomerator
+        if "UsrUpload_SETTINGS" in context:
+            print("Processing user-uploaded data!")
+            usr_metricweights = f'GLOBAL:{return_global_weight(context, "UserData")}'
+            print("Weights loaded")
+            usr_metricweights, usr_location = UserUpload(context['UsrUpload_SETTINGS'], context['UploadedData'], usr_metricweights, outputfolder, config)
+        else:
+            usr_location = ''
+            usr_metricweights = 'GLOBAL:0;Enrichment:0;Specificity:0'
 
         #Handles FlyAtlas1, passes needed variables to the Agglomerator
         if "FlyAtlas1" in sources:
@@ -654,7 +724,17 @@ def run_from_backbone(context, folder_addendum):
 
         try:
             print('Initialising the Tally')
-            StartTallying(context, fa1_location, fa1_extra_location, fa1weightstring, fa2_location, fa2_extra_location, fa2weightstring, outputfolder)
+            StartTallying(context, 
+                          fa1_location, 
+                          fa1_extra_location, 
+                          fa1weightstring, 
+                          fa2_location, 
+                          fa2_extra_location, 
+                          fa2weightstring, 
+                          outputfolder,
+                          usr_location,
+                          usr_metricweights)
+            
         except Exception as e:
             print(e)
 
@@ -816,7 +896,16 @@ def run_from_backbone(context, folder_addendum):
         print(fb_metricweights)
 
         try:
-            CompleteAnalysis(global_score_weights, fa1_metricweights, fa2_metricweights, fca_metricweights, fb_metricweights, speciesweightstring, species, outputfolder)
+            CompleteAnalysis(
+                global_score_weights,
+                usr_metricweights, 
+                fa1_metricweights, 
+                fa2_metricweights, 
+                fca_metricweights, 
+                fb_metricweights, 
+                speciesweightstring, 
+                species, 
+                outputfolder)
         except Exception as e:
             print(e)
 

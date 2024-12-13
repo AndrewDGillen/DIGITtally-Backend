@@ -123,9 +123,6 @@ def transcript_hits(hitlist, file, genebytranscript, specifictranscripts, needsa
                 
                 specificcat.append(hitgene)
 
-                if hitgene not in specifictranscripts:
-                    specifictranscripts[hitgene] = set()
-
                 specifictranscripts[hitgene].add(hittranscript)
             
             #If the transcript ID is not found in the dictionary, it is out of date and a more recent identifier must be found to allow further study
@@ -133,6 +130,34 @@ def transcript_hits(hitlist, file, genebytranscript, specifictranscripts, needsa
                 needsasynonym['T'].add(hittranscript)
     
     return hitlist, specificcat, specifictranscripts, needsasynonym
+
+#A necessary function for converting genes from user data to FBIDs.
+#Creates a list of possible IDs associated with each gene symbol
+def genes_to_fbids(synonymfile):
+    
+    genestoIDs = defaultdict(set)
+
+    with open(synonymfile) as synonyms_in:
+        IN =csv.reader(synonyms_in, delimiter='\t')
+
+        for line in IN:
+            if len(line) < 5:
+                continue
+
+            if line[0] == '#' or line[1] != 'Dmel' or "FBgn" not in line[0]:
+                continue
+            
+            fbid = line[0] 
+            symbols = [line[2],]
+
+            if line[5] != '':
+                alt_symbols = [x.strip() for x in line[5].split('|') if x.strip() != '']
+                symbols.extend(alt_symbols)
+
+            for i in symbols:
+                genestoIDs[i].add(fbid)
+    
+    return genestoIDs   
 
 #A function to check for alternate identifiers for genes which cannot be found
 def get_synonyms(needsasynonym, hitlist, synonymfile, outfolder):
@@ -254,7 +279,7 @@ def check_against_needs(flytype_sub_dictionary, weight_dict_for_source, outputby
     return outputbyhit
 
 #This function created the "Tally Starter", which will be used as the base for the eventual full DIGITtally output
-def build_tally_starter(hitlist, tallycats, symbols, specifictranscripts, updateids, max_len, weight_dict, obligates, completed_thresholds, header, additional_threshold_data, outfolder, user_supplied_list):
+def build_tally_starter(hitlist, tallycats, usrupload_data, symbols, specifictranscripts, updateids, max_len, weight_dict, obligates, completed_thresholds, header, additional_threshold_data, outfolder, user_supplied_list):
     
     outputbyhit = {}
 
@@ -309,6 +334,22 @@ def build_tally_starter(hitlist, tallycats, symbols, specifictranscripts, update
                     header.append(f'{datasource}_{mode}_{extra_threshold}_SCORE')
 
                     outputbyhit = check_against_needs(additional_threshold_data[datasource][mode][extra_threshold], weight_dict[datasource], outputbyhit, tmpobs, obstarget, updateids)
+
+    #Checks which genes appear in the user uploaded data lists, passing enrichment/specificity thresholds.
+    #As these are amalgams of tissues/types/ages of interest, these are only ever going to be 1 (present) or 0 (absent)
+    for datatype in usrupload_data:
+        header.append(f'UserUpload_{datatype}__score')
+
+        genes_passing_thresh = usrupload_data[datatype]
+
+
+        for gene in hitlist:
+            score = 0
+
+            if gene in genes_passing_thresh: 
+                score = 1
+            
+            outputbyhit[gene].append(score)
 
     #This catches cases (generally broad investigations eg of ONE tissue) where > the max number of desired genes of interest are found.
     #An upper limit on genes of interest is generally desirable as large gene lists will greatly increase execution times of later programs
@@ -519,16 +560,75 @@ def handle_fa2_data(targets, weight_dict, desigmodes, genebytranscript, folder, 
 
     return hitlist, datadict, needsasynonym, specifictranscripts
 
+#Handles UserUploads data 
+#In principal these are simple gene lists, but we need to be careful to align these correctly to FBIDs
+#This includes checking whether we're looking at transcripts or gene-level summaries.
+def handle_user_data(usrfolder, desigmode, specifictranscripts, genebytranscript, infofile):
+
+    usrupload_data = defaultdict(list)
+    symbolstoIDs = genes_to_fbids(infofile)
+    usr_hits = []
+
+    for mode in desigmode:
+        tmp_hits = []
+
+        if mode == 'ENRICHED':
+            target_file = f'{usrfolder}/target_tissues_enrichment.tsv'
+
+        elif mode == 'ABUNDANT':
+            target_file = f'{usrfolder}/target_tissues_specificity.tsv'
+
+        else:
+            #SHOULDN'T BE HIT
+            raise ValueError
+        
+        with open(target_file) as hits_in:
+            IN = csv.reader(hits_in, delimiter='\t')
+
+            for line in IN:
+                tmp_hits.append(line[0])
+        
+        #This blocks converts any* format of user gene name to FlyBase ID for identification purposes
+        #If this is unsuccessful we do nothing with that hit. No other option unfortunately!
+        for i_tmp in tmp_hits:
+
+            if "FBgn" in i_tmp:
+                final_hit = [i_tmp,]
+
+            elif "FBtr" in i_tmp:
+                try:
+                    matched_gene = genebytranscript[i_tmp]
+
+                    final_hit = [matched_gene,]
+                    specifictranscripts[matched_gene].add(i_tmp)
+
+                except:
+                    pass
+
+            else:
+                try:
+                    final_hit = symbolstoIDs[i_tmp]
+
+                except:
+                    pass
+            
+            for id in final_hit:
+                usr_hits.append(id)
+                usrupload_data[mode].append(id)
+
+    return usr_hits, usrupload_data, specifictranscripts
+
 #This builds weight dicts containing all 0s for cases where the user has uploaded their own gene list and excluded both FlyAtlases
 def generate_default_weights():
     default_weight_dict = {
         'FlyAtlas1':defaultdict(lambda:0),
-        'FlyAtlas2':defaultdict(lambda:0)
+        'FlyAtlas2':defaultdict(lambda:0),
+        'UserData':defaultdict(lambda:1)
     }
 
     return default_weight_dict
 
-def make_tally_basics(preexisting_list, fa1_folder, fa2_folder, fa1extra, fa2extra, mode, outputlists, outputtally, infofile, secondaryannotations, weightsfa1, weightsfa2, maxlen):
+def make_tally_basics(preexisting_list, fa1_folder, fa2_folder, usrfolder, fa1extra, fa2extra, mode, outputlists, outputtally, infofile, secondaryannotations, weightsfa1, weightsfa2, weights_usr, maxlen, synonymfile):
     print('STARTING')
     weight_dict = generate_default_weights()
     print(weight_dict)
@@ -539,9 +639,10 @@ def make_tally_basics(preexisting_list, fa1_folder, fa2_folder, fa1extra, fa2ext
     targets = ['MALE', 'FEMALE', 'LARVAL', 'ADULTS', 'ALL']
 
     tallycats = defaultdict(lambda: defaultdict(dict))
+    usrupload_data = {}
     obligates = {}
 
-    specifictranscripts = {}
+    specifictranscripts = defaultdict(set)
 
     completed_thresholds = initialise_threshold_checking(fa1_folder, fa2_folder)
 
@@ -590,10 +691,22 @@ def make_tally_basics(preexisting_list, fa1_folder, fa2_folder, fa1extra, fa2ext
         final_hitlist.extend(fa2hits)
     else:
         obligates['FlyAtlas2'] = []
+    
+    #A third block to handle user-uploaded data.
+    #These results are BINARY for enrichment/specificity - either they've been detected or not in the defined subset.
+    if usrfolder != '' and skipparameter == False:
+
+        obligates['UserData'] = []
+
+        usr_hits, usrupload_data, specifictranscripts = handle_user_data(usrfolder, desigmode, specifictranscripts, genebytranscript, infofile)
+
+        final_hitlist.extend(usr_hits)
 
     if preexisting_list != []:
         user_supplied_list = 1
         final_hitlist = preexisting_list
+
+    final_hitlist = list(set(final_hitlist))
 
     #We check to see if we can associate each gene of interest FbID with a Gene Symbol. 
     #If not, we need to search for an alternate ID number for a symbol
@@ -620,7 +733,7 @@ def make_tally_basics(preexisting_list, fa1_folder, fa2_folder, fa1extra, fa2ext
 
     #Using the data we've gathered, we create output files
     try:
-        final_hitlist, output_by_hit, header = build_tally_starter(final_hitlist, tallycats, symbolbygene, specifictranscripts, updateids, maxlen, weight_dict, obligates, completed_thresholds, header, additional_threshold_data, outputtally, user_supplied_list)
+        final_hitlist, output_by_hit, header = build_tally_starter(final_hitlist, tallycats, usrupload_data, symbolbygene, specifictranscripts, updateids, maxlen, weight_dict, obligates, completed_thresholds, header, additional_threshold_data, outputtally, user_supplied_list)
         make_lists(final_hitlist, symbolbygene, outputlists)
     except Exception as e:
         print(e)
